@@ -8,6 +8,7 @@ import {
 	useCallback,
 	useContext,
 	useMemo,
+	useRef,
 	useState,
 	type ReactNode,
 } from 'react'
@@ -51,18 +52,28 @@ export function OnboardingDraftProvider ({
 	children,
 }: OnboardingDraftProviderProps) {
 	const [draft, setDraft] = useState<CustomCycleDraft>(createEmptyCustomDraft)
+	const draftRef = useRef(draft)
+
+	const commitDraft = useCallback(
+		(updater: (current: CustomCycleDraft) => CustomCycleDraft) => {
+			const next = updater(draftRef.current)
+			draftRef.current = next
+			setDraft(next)
+		},
+		[],
+	)
 
 	const resetDraft = useCallback(() => {
-		setDraft(createEmptyCustomDraft())
-	}, [])
+		commitDraft(() => createEmptyCustomDraft())
+	}, [commitDraft])
 
 	const setName = useCallback((name: string) => {
-		setDraft((current) => ({ ...current, name }))
-	}, [])
+		commitDraft((current) => ({ ...current, name }))
+	}, [commitDraft])
 
 	const addShift = useCallback((shiftTypeId: string): DraftMutation => {
 		let result: DraftMutation = { ok: false, message: 'Не удалось добавить смену.' }
-		setDraft((current) => {
+		commitDraft((current) => {
 			result = appendCycleItem(current.cycle, shiftTypeId)
 			if (!result.ok) {
 				return current
@@ -70,11 +81,11 @@ export function OnboardingDraftProvider ({
 			return { ...current, cycle: result.cycle }
 		})
 		return result
-	}, [])
+	}, [commitDraft])
 
 	const addCustomShift = useCallback((shift: ShiftType): DraftMutation => {
 		let result: DraftMutation = { ok: false, message: 'Не удалось добавить смену.' }
-		setDraft((current) => {
+		commitDraft((current) => {
 			result = appendCycleItem(current.cycle, shift.id)
 			if (!result.ok) {
 				return current
@@ -86,32 +97,32 @@ export function OnboardingDraftProvider ({
 			}
 		})
 		return result
-	}, [])
+	}, [commitDraft])
 
 	const updateShiftType = useCallback((shift: ShiftType) => {
-		setDraft((current) => ({
+		commitDraft((current) => ({
 			...current,
 			shiftTypes: upsertShiftType(current.shiftTypes, shift),
 		}))
-	}, [])
+	}, [commitDraft])
 
 	const removeAt = useCallback((index: number) => {
-		setDraft((current) => ({
+		commitDraft((current) => ({
 			...current,
 			cycle: removeCycleItem(current.cycle, index),
 		}))
-	}, [])
+	}, [commitDraft])
 
 	const moveAt = useCallback((index: number, direction: -1 | 1) => {
-		setDraft((current) => ({
+		commitDraft((current) => ({
 			...current,
 			cycle: moveCycleItem(current.cycle, index, direction),
 		}))
-	}, [])
+	}, [commitDraft])
 
 	const duplicateAt = useCallback((index: number): DraftMutation => {
 		let result: DraftMutation = { ok: false, message: 'Не удалось скопировать смену.' }
-		setDraft((current) => {
+		commitDraft((current) => {
 			result = duplicateCycleItem(current.cycle, index)
 			if (!result.ok) {
 				return current
@@ -119,22 +130,22 @@ export function OnboardingDraftProvider ({
 			return { ...current, cycle: result.cycle }
 		})
 		return result
-	}, [])
+	}, [commitDraft])
 
 	const replaceAt = useCallback((index: number, shiftTypeId: string) => {
-		setDraft((current) => ({
+		commitDraft((current) => ({
 			...current,
 			cycle: replaceCycleItem(current.cycle, index, shiftTypeId),
 		}))
-	}, [])
+	}, [commitDraft])
 
 	const replaceAtWithCustom = useCallback((index: number, shift: ShiftType) => {
-		setDraft((current) => ({
+		commitDraft((current) => ({
 			...current,
 			cycle: replaceCycleItem(current.cycle, index, shift.id),
 			shiftTypes: upsertShiftType(current.shiftTypes, shift),
 		}))
-	}, [])
+	}, [commitDraft])
 
 	const value = useMemo(
 		() => ({
