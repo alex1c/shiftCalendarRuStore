@@ -17,9 +17,11 @@ import {
 	calendarDateToLocalDate,
 	formatDayMonthYear,
 	getStartDateHint,
+	getStartDateHintFromCycle,
 	requireSchedulePreset,
 	todayCalendarDate,
 } from '@/src/domain'
+import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
 import { spacing, typography, useTheme } from '@/src/theme'
 
@@ -27,7 +29,15 @@ type Props = NativeStackScreenProps<OnboardingStackParamList, 'StartDate'>
 
 export function StartDateScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
-	const preset = requireSchedulePreset(route.params.presetId)
+	const { draft } = useOnboardingDraft()
+	const presetId = route.params.presetId
+	const preset = presetId ? requireSchedulePreset(presetId) : null
+	const cycle = preset?.cycle ?? draft.cycle
+	const shiftTypes = preset ? DEFAULT_SHIFT_TYPES : draft.shiftTypes
+	const hint = preset
+		? getStartDateHint(preset, DEFAULT_SHIFT_TYPES)
+		: getStartDateHintFromCycle(cycle, shiftTypes)
+
 	const [startDate, setStartDate] = useState(todayCalendarDate)
 	const [showPicker, setShowPicker] = useState(false)
 
@@ -60,7 +70,7 @@ export function StartDateScreen ({ navigation, route }: Props) {
 				<Text
 					style={[styles.hint, { color: colors.textSecondary }]}
 				>
-					{getStartDateHint(preset, DEFAULT_SHIFT_TYPES)}
+					{hint}
 				</Text>
 				<Text
 					style={[styles.selected, { color: colors.textPrimary }]}
@@ -93,7 +103,7 @@ export function StartDateScreen ({ navigation, route }: Props) {
 					label="Далее"
 					onPress={() => {
 						navigation.navigate('Confirm', {
-							presetId: preset.id,
+							presetId,
 							startDate,
 						})
 					}}

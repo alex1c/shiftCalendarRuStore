@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { PresetCard } from '@/src/components/PresetCard'
 import { Screen } from '@/src/components/Screen'
 import { SCHEDULE_PRESETS } from '@/src/domain'
+import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
 import {
 	elevation,
@@ -24,6 +25,7 @@ type Props = NativeStackScreenProps<
 
 export function PresetSelectScreen ({ navigation }: Props) {
 	const { colors } = useTheme()
+	const { resetDraft } = useOnboardingDraft()
 
 	return (
 		<Screen>
@@ -53,7 +55,8 @@ export function PresetSelectScreen ({ navigation }: Props) {
 					accessibilityRole="button"
 					accessibilityLabel="Свой график"
 					onPress={() => {
-						navigation.navigate('CustomComingSoon')
+						resetDraft()
+						navigation.navigate('CustomBuilder')
 					}}
 					style={({ pressed }) => [
 						styles.customCard,

@@ -1,6 +1,6 @@
 /**
  * Built-in schedule presets offered on first launch.
- * Custom-cycle editing is Phase 2 — the custom card is informational only.
+ * Custom-cycle editing lives in the builder (Phase 2); this catalog is presets only.
  */
 
 import type { SchedulePreset } from '@/src/types'

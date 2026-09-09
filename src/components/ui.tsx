@@ -7,6 +7,7 @@ import {
 	Pressable,
 	StyleSheet,
 	Text,
+	TextInput,
 	View,
 	type StyleProp,
 	type ViewStyle,
@@ -28,6 +29,7 @@ type ButtonProps = {
 	disabled?: boolean
 	accessibilityLabel?: string
 	style?: StyleProp<ViewStyle>
+	compact?: boolean
 }
 
 export function AppButton ({
@@ -37,6 +39,7 @@ export function AppButton ({
 	disabled = false,
 	accessibilityLabel,
 	style,
+	compact = false,
 }: ButtonProps) {
 	const { colors } = useTheme()
 	const isPrimary = variant === 'primary'
@@ -68,6 +71,7 @@ export function AppButton ({
 			onPress={onPress}
 			style={({ pressed }) => [
 				styles.buttonBase,
+				compact ? styles.buttonCompact : null,
 				{
 					backgroundColor,
 					borderColor,
@@ -103,6 +107,63 @@ export function SurfaceCard ({ children, style }: CardProps) {
 			]}
 		>
 			{children}
+		</View>
+	)
+}
+
+type TextFieldProps = {
+	label: string
+	value: string
+	onChangeText: (value: string) => void
+	placeholder?: string
+	error?: string
+	maxLength?: number
+	autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
+	keyboardType?: 'default' | 'number-pad' | 'numeric'
+	accessibilityLabel?: string
+}
+
+export function AppTextField ({
+	label,
+	value,
+	onChangeText,
+	placeholder,
+	error,
+	maxLength,
+	autoCapitalize = 'sentences',
+	keyboardType = 'default',
+	accessibilityLabel,
+}: TextFieldProps) {
+	const { colors } = useTheme()
+	return (
+		<View>
+			<Text style={[styles.fieldLabel, { color: colors.textSecondary }]}>
+				{label}
+			</Text>
+			<TextInput
+				accessibilityLabel={accessibilityLabel ?? label}
+				value={value}
+				onChangeText={onChangeText}
+				placeholder={placeholder}
+				placeholderTextColor={colors.textTertiary}
+				maxLength={maxLength}
+				autoCapitalize={autoCapitalize}
+				autoCorrect={false}
+				keyboardType={keyboardType}
+				style={[
+					styles.fieldInput,
+					{
+						color: colors.textPrimary,
+						backgroundColor: colors.surface,
+						borderColor: error ? colors.danger : colors.border,
+					},
+				]}
+			/>
+			{error ? (
+				<Text style={[styles.fieldError, { color: colors.danger }]}>
+					{error}
+				</Text>
+			) : null}
 		</View>
 	)
 }
@@ -151,6 +212,25 @@ const styles = StyleSheet.create({
 	},
 	buttonLabel: {
 		...typography.bodyStrong,
+	},
+	buttonCompact: {
+		minHeight: touchTarget.min,
+		paddingHorizontal: spacing.sm,
+	},
+	fieldLabel: {
+		...typography.label,
+		marginBottom: spacing.xxs,
+	},
+	fieldInput: {
+		minHeight: touchTarget.min,
+		borderWidth: 1,
+		borderRadius: radius.sm,
+		paddingHorizontal: spacing.sm,
+		...typography.body,
+	},
+	fieldError: {
+		...typography.caption,
+		marginTop: spacing.xxs,
 	},
 	card: {
 		borderRadius: radius.lg,

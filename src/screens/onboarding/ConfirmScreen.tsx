@@ -12,12 +12,15 @@ import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
 import {
 	DEFAULT_SHIFT_TYPES,
+	createWorkScheduleFromCustom,
 	createWorkScheduleFromPreset,
 	formatCycleArrows,
 	formatDayMonthYear,
 	requireSchedulePreset,
+	sanitizeScheduleName,
 } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
+import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
 import { spacing, typography, useTheme } from '@/src/theme'
 
@@ -26,7 +29,15 @@ type Props = NativeStackScreenProps<OnboardingStackParamList, 'Confirm'>
 export function ConfirmScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
 	const { persistSchedule } = useAppBootstrap()
-	const preset = requireSchedulePreset(route.params.presetId)
+	const { draft } = useOnboardingDraft()
+	const presetId = route.params.presetId
+	const preset = presetId ? requireSchedulePreset(presetId) : null
+	const isCustom = preset == null
+	const cycle = preset?.cycle ?? draft.cycle
+	const shiftTypes = preset ? DEFAULT_SHIFT_TYPES : draft.shiftTypes
+	const displayName = preset
+		? preset.name
+		: sanitizeScheduleName(draft.name)
 	const [saving, setSaving] = useState(false)
 
 	const handleCreate = async () => {
@@ -35,11 +46,18 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 		}
 		setSaving(true)
 		try {
-			const schedule = createWorkScheduleFromPreset({
-				preset,
-				startDate: route.params.startDate,
-				shiftTypes: DEFAULT_SHIFT_TYPES,
-			})
+			const schedule = isCustom
+				? createWorkScheduleFromCustom({
+					name: draft.name,
+					startDate: route.params.startDate,
+					cycle: draft.cycle,
+					shiftTypes: draft.shiftTypes,
+				})
+				: createWorkScheduleFromPreset({
+					preset: preset!,
+					startDate: route.params.startDate,
+					shiftTypes: DEFAULT_SHIFT_TYPES,
+				})
 			await persistSchedule(schedule)
 			navigation.getParent()?.dispatch(
 				CommonActions.reset({
@@ -60,14 +78,21 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 
 			<SurfaceCard style={styles.card}>
 				<Text style={[styles.name, { color: colors.textPrimary }]}>
-					{preset.name}
+					{displayName}
 				</Text>
+				{isCustom ? (
+					<Text
+						style={[styles.kind, { color: colors.textSecondary }]}
+					>
+						Свой график
+					</Text>
+				) : null}
 				<Text
 					style={[styles.cycle, { color: colors.textSecondary }]}
 				>
-					{formatCycleArrows(preset.cycle, DEFAULT_SHIFT_TYPES)}
+					{formatCycleArrows(cycle, shiftTypes)}
 				</Text>
-				<CycleChips cycle={preset.cycle} />
+				<CycleChips cycle={cycle} shiftTypes={shiftTypes} />
 				<Text style={[styles.start, { color: colors.textPrimary }]}>
 					Начало цикла: {formatDayMonthYear(route.params.startDate)}
 				</Text>
@@ -103,6 +128,9 @@ const styles = StyleSheet.create({
 	},
 	name: {
 		...typography.title,
+	},
+	kind: {
+		...typography.caption,
 	},
 	cycle: {
 		...typography.body,

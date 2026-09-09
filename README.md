@@ -32,10 +32,10 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 0 — Foundation** and **Phase 1 — First schedule / onboarding** are implemented.
+**Phase 2 — Custom cycle builder** is implemented.
 
-A new user can pick a preset, choose a cycle start date, create the schedule,
-land on the current-month calendar, and skip onboarding after a full restart.
+A user can pick a built-in preset or assemble a custom repeating cycle,
+choose a start date, create the schedule, and see it on the calendar after restart.
 
 ## Stack
 

@@ -127,6 +127,14 @@ export const colors = {
 		shiftOffFg: '#3F5346',
 		shiftCustomBg: '#E8E2D6',
 		shiftCustomFg: '#1C1916',
+		shiftEveningBg: '#E8D7E4',
+		shiftEveningFg: '#6B3A62',
+		shiftMorningBg: '#D4E8E2',
+		shiftMorningFg: '#1F5C52',
+		shiftLateBg: '#D5D8EA',
+		shiftLateFg: '#3A3F6B',
+		shiftAccentBg: '#F0D6C8',
+		shiftAccentFg: '#7A3E24',
 	},
 	dark: {
 		background: '#161412',
@@ -158,6 +166,14 @@ export const colors = {
 		shiftOffFg: '#B4C9BA',
 		shiftCustomBg: '#2C2823',
 		shiftCustomFg: '#F4F0E8',
+		shiftEveningBg: '#3A2436',
+		shiftEveningFg: '#E6BFD8',
+		shiftMorningBg: '#1C3330',
+		shiftMorningFg: '#A8D4CB',
+		shiftLateBg: '#24263A',
+		shiftLateFg: '#C3C7E8',
+		shiftAccentBg: '#3A261C',
+		shiftAccentFg: '#E8C0A8',
 	},
 } as const
 
@@ -193,6 +209,14 @@ export type ThemeColors = {
 	shiftOffFg: string
 	shiftCustomBg: string
 	shiftCustomFg: string
+	shiftEveningBg: string
+	shiftEveningFg: string
+	shiftMorningBg: string
+	shiftMorningFg: string
+	shiftLateBg: string
+	shiftLateFg: string
+	shiftAccentBg: string
+	shiftAccentFg: string
 }
 
 /** Map a shift kind / color token to chip colors for the active scheme. */
@@ -215,6 +239,26 @@ export function shiftPalette (
 			return {
 				background: themeColors.shiftCustomBg,
 				foreground: themeColors.shiftCustomFg,
+			}
+		case 'evening':
+			return {
+				background: themeColors.shiftEveningBg,
+				foreground: themeColors.shiftEveningFg,
+			}
+		case 'morning':
+			return {
+				background: themeColors.shiftMorningBg,
+				foreground: themeColors.shiftMorningFg,
+			}
+		case 'late':
+			return {
+				background: themeColors.shiftLateBg,
+				foreground: themeColors.shiftLateFg,
+			}
+		case 'accent':
+			return {
+				background: themeColors.shiftAccentBg,
+				foreground: themeColors.shiftAccentFg,
 			}
 		case 'day':
 		default:

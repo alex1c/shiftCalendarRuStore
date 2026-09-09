@@ -1,10 +1,18 @@
 import type { NavigatorScreenParams } from '@react-navigation/native'
 
+export type CustomShiftEditorParams = {
+	intent: 'create-and-add' | 'create-and-replace' | 'edit'
+	shiftTypeId?: string
+	cycleIndex?: number
+}
+
 export type OnboardingStackParamList = {
 	PresetSelect: undefined
-	CustomComingSoon: undefined
-	StartDate: { presetId: string }
-	Confirm: { presetId: string; startDate: string }
+	CustomBuilder: undefined
+	CustomShiftEditor: CustomShiftEditorParams
+	CycleItem: { index: number }
+	StartDate: { presetId?: string }
+	Confirm: { presetId?: string; startDate: string }
 }
 
 export type MoreStackParamList = {

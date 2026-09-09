@@ -11,8 +11,10 @@ import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
 import {
 	formatCycleArrows,
+	formatCycleLetters,
 	formatDayMonthYear,
 	getSchedulePreset,
+	isCustomSchedule,
 } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import type { MoreStackParamList } from '@/src/navigation/types'
@@ -28,8 +30,9 @@ export function MyScheduleScreen ({ navigation }: Props) {
 		return null
 	}
 
-	const presetName =
-		getSchedulePreset(schedule.presetId)?.name ?? schedule.name
+	const custom = isCustomSchedule(schedule)
+	const preset = getSchedulePreset(schedule.presetId)
+	const title = custom ? schedule.name : (preset?.name ?? schedule.name)
 
 	const handleReset = () => {
 		Alert.alert(
@@ -60,23 +63,49 @@ export function MyScheduleScreen ({ navigation }: Props) {
 		<Screen includeBottomSafeArea={false}>
 			<SurfaceCard style={styles.card}>
 				<Text style={[styles.label, { color: colors.textTertiary }]}>
-					Пресет
+					График
 				</Text>
 				<Text style={[styles.value, { color: colors.textPrimary }]}>
-					{presetName}
+					{title}
 				</Text>
+				{custom ? (
+					<>
+						<Text
+							style={[
+								styles.label,
+								{ color: colors.textTertiary },
+							]}
+						>
+							Тип
+						</Text>
+						<Text
+							style={[styles.value, { color: colors.textPrimary }]}
+						>
+							Свой график
+						</Text>
+					</>
+				) : null}
 				<Text style={[styles.label, { color: colors.textTertiary }]}>
 					Цикл
 				</Text>
 				<Text style={[styles.value, { color: colors.textPrimary }]}>
-					{formatCycleArrows(schedule.cycle, schedule.shiftTypes)}
+					{custom
+						? formatCycleLetters(
+							schedule.cycle,
+							schedule.shiftTypes,
+							' ',
+						)
+						: formatCycleArrows(
+							schedule.cycle,
+							schedule.shiftTypes,
+						)}
 				</Text>
 				<CycleChips
 					cycle={schedule.cycle}
 					shiftTypes={schedule.shiftTypes}
 				/>
 				<Text style={[styles.label, { color: colors.textTertiary }]}>
-					Начало цикла
+					Начало
 				</Text>
 				<Text style={[styles.value, { color: colors.textPrimary }]}>
 					{formatDayMonthYear(schedule.startDate)}

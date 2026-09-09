@@ -133,3 +133,19 @@ export function getStartDateHint (
 	const firstName = first?.name ?? 'первого элемента'
 	return `Для графика ${letters} укажите день, который соответствует «${firstName}».`
 }
+
+/**
+ * Start-date hint for an arbitrary cycle (presets and custom drafts).
+ */
+export function getStartDateHintFromCycle (
+	cycle: readonly string[],
+	shiftTypes: readonly ShiftType[],
+): string {
+	if (cycle.length === 0) {
+		return 'Выберите день, который соответствует первому элементу выбранного цикла.'
+	}
+	const letters = formatCycleHyphen(cycle, shiftTypes)
+	const first = shiftTypes.find((item) => item.id === cycle[0])
+	const firstName = first?.name ?? 'первого элемента'
+	return `Для графика ${letters} укажите день, который соответствует «${firstName}».`
+}
