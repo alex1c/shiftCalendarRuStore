@@ -26,6 +26,10 @@ export function MainTabNavigator () {
 				tabBarStyle: {
 					backgroundColor: colors.tabBar,
 					borderTopColor: colors.border,
+					minHeight: 56,
+				},
+				tabBarItemStyle: {
+					minHeight: 48,
 				},
 				tabBarLabelStyle: {
 					fontSize: 12,

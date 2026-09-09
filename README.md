@@ -32,10 +32,10 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 2 — Custom cycle builder** is implemented.
+**Phase 3 — Calendar UX** is implemented.
 
-A user can pick a built-in preset or assemble a custom repeating cycle,
-choose a start date, create the schedule, and see it on the calendar after restart.
+The calendar is the main working screen: month navigation, today/selected
+states, day details with duration, next work shift, and compact month stats.
 
 ## Stack
 

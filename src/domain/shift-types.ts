@@ -1,6 +1,7 @@
 /**
  * Default shift templates shipped with Phase 1.
  * Letters Д / Н / В are the primary distinguisher; colors are secondary.
+ * `custom` kind is used by user-defined shifts from the cycle builder.
  */
 
 import type { ShiftType } from '@/src/types'

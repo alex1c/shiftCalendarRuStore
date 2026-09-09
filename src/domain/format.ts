@@ -3,7 +3,7 @@
  */
 
 import type { SchedulePreset, ShiftType } from '@/src/types'
-import { parseCalendarDate } from './dates'
+import { mondayFirstWeekday, parseCalendarDate } from './dates'
 import { requireDefaultShiftType } from './shift-types'
 
 const MONTHS_NOMINATIVE = [
@@ -45,6 +45,39 @@ export const WEEKDAY_LABELS_MONDAY_FIRST = [
 	'Сб',
 	'Вс',
 ] as const
+
+const WEEKDAY_NAMES_MONDAY_FIRST = [
+	'понедельник',
+	'вторник',
+	'среда',
+	'четверг',
+	'пятница',
+	'суббота',
+	'воскресенье',
+] as const
+
+/**
+ * Russian plural: 1 смена, 2 смены, 5 смен.
+ */
+export function ruPlural (
+	count: number,
+	one: string,
+	few: string,
+	many: string,
+): string {
+	const abs = Math.abs(count) % 100
+	const last = abs % 10
+	if (abs > 10 && abs < 20) {
+		return many
+	}
+	if (last === 1) {
+		return one
+	}
+	if (last >= 2 && last <= 4) {
+		return few
+	}
+	return many
+}
 
 function shortNameFor (
 	shiftId: string,
@@ -113,6 +146,31 @@ export function formatShiftHours (shift: ShiftType): string | null {
 		return null
 	}
 	return `${shift.startTime}–${shift.endTime}`
+}
+
+/** `Вторник, 9 сентября` */
+export function formatWeekdayDayMonth (iso: string): string {
+	const name = WEEKDAY_NAMES_MONDAY_FIRST[mondayFirstWeekday(iso)]
+	const capitalized = `${name.charAt(0).toUpperCase()}${name.slice(1)}`
+	return `${capitalized}, ${formatDayMonth(iso)}`
+}
+
+/**
+ * Details-card title. Built-in day/night get «смена»; off and custom keep name.
+ */
+export function formatShiftTitle (shift: ShiftType): string {
+	if (shift.kind === 'day' || shift.kind === 'night') {
+		return `${shift.name} смена`
+	}
+	return shift.name
+}
+
+/** Compact today line: `Сегодня — Ночная` / `Сегодня — выходной`. */
+export function formatTodaySummary (shift: ShiftType): string {
+	if (shift.kind === 'off') {
+		return 'Сегодня — выходной'
+	}
+	return `Сегодня — ${shift.name}`
 }
 
 /**

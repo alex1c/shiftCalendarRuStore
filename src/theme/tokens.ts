@@ -119,6 +119,7 @@ export const colors = {
 		overlay: 'rgba(28, 25, 22, 0.45)',
 		tabBar: '#FFFDF8',
 		todayRing: '#3F6B58',
+		weekendText: '#7A6558',
 		shiftDayBg: '#F3E4C4',
 		shiftDayFg: '#6F5310',
 		shiftNightBg: '#D7E0EE',
@@ -158,6 +159,7 @@ export const colors = {
 		overlay: 'rgba(0, 0, 0, 0.55)',
 		tabBar: '#1C1A17',
 		todayRing: '#8FBFAB',
+		weekendText: '#C4B19A',
 		shiftDayBg: '#3A3218',
 		shiftDayFg: '#E6C97A',
 		shiftNightBg: '#1E2A40',
@@ -201,6 +203,7 @@ export type ThemeColors = {
 	overlay: string
 	tabBar: string
 	todayRing: string
+	weekendText: string
 	shiftDayBg: string
 	shiftDayFg: string
 	shiftNightBg: string

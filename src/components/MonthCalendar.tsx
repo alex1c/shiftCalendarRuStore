@@ -1,6 +1,6 @@
 /**
- * Month grid. Cells display the day number plus the shift letter.
- * Color is secondary; Д / Н / В is always visible.
+ * Month grid. Each cell shows the day number and shift shortName.
+ * Today, selected, and today+selected are distinct visual states.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -35,75 +35,115 @@ export function MonthCalendar ({
 	onSelectDate,
 }: MonthCalendarProps) {
 	const { colors } = useTheme()
+	const rows: MonthGridCell[][] = []
+	for (let row = 0; row < 6; row += 1) {
+		rows.push(cells.slice(row * 7, row * 7 + 7))
+	}
 
 	return (
 		<View style={styles.wrap}>
 			<View style={styles.weekRow}>
-				{WEEKDAY_LABELS_MONDAY_FIRST.map((label) => (
-					<Text
-						key={label}
-						style={[styles.weekday, { color: colors.textTertiary }]}
-					>
-						{label}
-					</Text>
-				))}
-			</View>
-			<View style={styles.grid}>
-				{cells.map((cell) => {
-					const shift = shiftsByDate[cell.date]
-					const palette = shiftPalette(
-						shift?.color ?? 'off',
-						colors,
-					)
-					const isToday = cell.date === todayDate
-					const isSelected = cell.date === selectedDate
-					const faded = cell.inCurrentMonth ? 1 : 0.38
-
+				{WEEKDAY_LABELS_MONDAY_FIRST.map((label, index) => {
+					const isWeekend = index >= 5
 					return (
-						<Pressable
-							key={cell.date}
-							accessibilityRole="button"
-							accessibilityLabel={
-								shift
-									? `${cell.day}, ${shift.name}`
-									: String(cell.day)
-							}
-							accessibilityState={{ selected: isSelected }}
-							onPress={() => onSelectDate(cell.date)}
+						<Text
+							key={label}
 							style={[
-								styles.cell,
+								styles.weekday,
 								{
-									backgroundColor: isSelected
-										? colors.primaryMuted
-										: palette.background,
-									borderColor: isToday
-										? colors.todayRing
-										: isSelected
-											? colors.primary
-											: 'transparent',
-									opacity: faded,
+									color: isWeekend
+										? colors.weekendText
+										: colors.textTertiary,
 								},
 							]}
 						>
-							<Text
-								style={[
-									styles.dayNumber,
-									{ color: colors.textPrimary },
-								]}
-							>
-								{cell.day}
-							</Text>
-							<Text
-								style={[
-									styles.shiftLetter,
-									{ color: palette.foreground },
-								]}
-							>
-								{shift?.shortName ?? ''}
-							</Text>
-						</Pressable>
+							{label}
+						</Text>
 					)
 				})}
+			</View>
+			<View style={styles.grid}>
+				{rows.map((row) => (
+					<View key={row[0]?.date ?? 'row'} style={styles.gridRow}>
+						{row.map((cell, column) => {
+							const shift = shiftsByDate[cell.date]
+							const palette = shiftPalette(
+								shift?.color ?? 'off',
+								colors,
+							)
+							const isToday = cell.date === todayDate
+							const isSelected = cell.date === selectedDate
+							const isWeekend = column >= 5
+							const faded = !cell.inCurrentMonth && !isSelected
+
+							let backgroundColor = palette.background
+							let borderColor = 'transparent'
+							let borderWidth = 2
+							if (isSelected && isToday) {
+								backgroundColor = colors.primaryMuted
+								borderColor = colors.todayRing
+								borderWidth = 3
+							} else if (isSelected) {
+								backgroundColor = colors.primaryMuted
+								borderColor = colors.primary
+								borderWidth = 2
+							} else if (isToday) {
+								borderColor = colors.todayRing
+								borderWidth = 3
+							}
+
+							const shortName = shift?.shortName ?? ''
+
+							return (
+								<Pressable
+									key={cell.date}
+									accessibilityRole="button"
+									accessibilityLabel={
+										shift
+											? `${cell.day}, ${shift.name}`
+											: String(cell.day)
+									}
+									accessibilityState={{ selected: isSelected }}
+									onPress={() => onSelectDate(cell.date)}
+									style={[
+										styles.cell,
+										{
+											backgroundColor,
+											borderColor,
+											borderWidth,
+											opacity: faded ? 0.4 : 1,
+										},
+									]}
+								>
+									<Text
+										style={[
+											styles.dayNumber,
+											{
+												color: isWeekend && cell.inCurrentMonth
+													? colors.weekendText
+													: colors.textPrimary,
+											},
+										]}
+									>
+										{cell.day}
+									</Text>
+									<Text
+										style={[
+											styles.shiftLetter,
+											{
+												color: palette.foreground,
+												fontSize: shortName.length >= 3 ? 11 : 12,
+											},
+										]}
+										numberOfLines={1}
+									>
+										{shortName}
+									</Text>
+								</Pressable>
+							)
+						})}
+					</View>
+				))}
 			</View>
 		</View>
 	)
@@ -123,18 +163,19 @@ const styles = StyleSheet.create({
 		paddingBottom: spacing.xxs,
 	},
 	grid: {
+		gap: 2,
+	},
+	gridRow: {
 		flexDirection: 'row',
-		flexWrap: 'wrap',
+		gap: 2,
 	},
 	cell: {
-		width: '14.285%',
-		minHeight: touchTarget.min + 8,
+		flex: 1,
+		minHeight: touchTarget.min,
 		borderRadius: radius.sm,
-		borderWidth: 2,
 		alignItems: 'center',
 		justifyContent: 'center',
 		paddingVertical: spacing.xxs,
-		marginBottom: 2,
 	},
 	dayNumber: {
 		...typography.calendarDay,

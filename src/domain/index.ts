@@ -40,8 +40,12 @@ export {
 	formatDayMonthYear,
 	formatMonthYear,
 	formatShiftHours,
+	formatShiftTitle,
+	formatTodaySummary,
+	formatWeekdayDayMonth,
 	getStartDateHint,
 	getStartDateHintFromCycle,
+	ruPlural,
 } from './format'
 export {
 	MONTH_GRID_CELL_COUNT,
@@ -92,3 +96,18 @@ export {
 	parseClockTime,
 	shiftDurationMinutes,
 } from './time'
+export {
+	formatDurationMinutes,
+	isWorkShift,
+	workDurationMinutes,
+} from './duration'
+export {
+	NEXT_SHIFT_SEARCH_DAYS,
+	computeMonthStats,
+	cycleHasWorkShift,
+	findNextWorkShift,
+	formatMonthStats,
+	formatNextWorkShift,
+	type MonthStats,
+	type NextWorkShift,
+} from './insights'

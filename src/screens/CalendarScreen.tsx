@@ -1,9 +1,11 @@
 /**
  * Main calendar — current month derived from the saved cycle.
+ * Insights (next shift, month stats) use the same engine as the grid.
  */
 
 import { useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Ionicons } from '@expo/vector-icons'
 
 import { DayDetails } from '@/src/components/DayDetails'
 import { MonthCalendar } from '@/src/components/MonthCalendar'
@@ -11,14 +13,21 @@ import { Screen } from '@/src/components/Screen'
 import {
 	addMonths,
 	buildMonthGrid,
+	computeMonthStats,
+	findNextWorkShift,
 	formatCalendarDate,
+	formatMonthStats,
 	formatMonthYear,
+	formatNextWorkShift,
+	formatShiftHours,
+	formatTodaySummary,
 	parseCalendarDate,
 	resolveShiftForDate,
 	todayCalendarDate,
 } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import {
+	radius,
 	spacing,
 	touchTarget,
 	typography,
@@ -57,6 +66,23 @@ export function CalendarScreen () {
 	const selectedShift = schedule
 		? resolveShiftForDate(schedule, selectedDate)
 		: null
+	const todayShift = schedule
+		? resolveShiftForDate(schedule, today)
+		: null
+
+	const monthStats = useMemo(() => {
+		if (!schedule) {
+			return null
+		}
+		return computeMonthStats(schedule, visible.year, visible.month)
+	}, [schedule, visible.year, visible.month])
+
+	const nextShiftLabel = useMemo(() => {
+		if (!schedule) {
+			return null
+		}
+		return formatNextWorkShift(today, findNextWorkShift(schedule, today))
+	}, [schedule, today])
 
 	const isCurrentMonth =
 		visible.year === todayParts.year &&
@@ -84,35 +110,87 @@ export function CalendarScreen () {
 		setSelectedDate(today)
 	}
 
-	if (!schedule || !selectedShift) {
+	if (!schedule || !selectedShift || !todayShift) {
 		return null
 	}
 
+	const todayHours = formatShiftHours(todayShift)
+
 	return (
-		<Screen scroll={false} includeBottomSafeArea={false}>
-			<View style={styles.header}>
-				<Text style={[styles.title, { color: colors.textPrimary }]}>
+		<Screen includeBottomSafeArea={false}>
+			<View style={styles.headerRow}>
+				<HeaderIconButton
+					icon="chevron-back"
+					accessibilityLabel="Предыдущий месяц"
+					onPress={() => goToMonth(-1)}
+				/>
+				<Text
+					style={[styles.title, { color: colors.textPrimary }]}
+					accessibilityRole="header"
+				>
 					{formatMonthYear(visible.year, visible.month)}
 				</Text>
-				<View style={styles.nav}>
-					<HeaderButton
-						label="‹"
-						accessibilityLabel="Предыдущий месяц"
-						onPress={() => goToMonth(-1)}
-					/>
-					<HeaderButton
-						label="Сегодня"
-						accessibilityLabel="Вернуться к текущему месяцу"
-						onPress={handleSelectToday}
-						disabled={isCurrentMonth && selectedDate === today}
-					/>
-					<HeaderButton
-						label="›"
-						accessibilityLabel="Следующий месяц"
-						onPress={() => goToMonth(1)}
-					/>
-				</View>
+				<HeaderIconButton
+					icon="chevron-forward"
+					accessibilityLabel="Следующий месяц"
+					onPress={() => goToMonth(1)}
+				/>
 			</View>
+			<Pressable
+				accessibilityRole="button"
+				accessibilityLabel="Вернуться к текущему месяцу"
+				disabled={isCurrentMonth && selectedDate === today}
+				onPress={handleSelectToday}
+				style={({ pressed }) => [
+					styles.todayButton,
+					{
+						backgroundColor: colors.surface,
+						borderColor: colors.border,
+						opacity:
+							isCurrentMonth && selectedDate === today
+								? 0.45
+								: pressed
+									? 0.85
+									: 1,
+					},
+				]}
+			>
+				<Text style={[styles.todayButtonLabel, { color: colors.primary }]}>
+					Сегодня
+				</Text>
+			</Pressable>
+
+			{isCurrentMonth ? (
+				<View
+					style={[
+						styles.todaySummary,
+						{
+							backgroundColor: colors.surface,
+							borderColor: colors.border,
+						},
+					]}
+				>
+					<Text
+						style={[
+							styles.todaySummaryTitle,
+							{ color: colors.textPrimary },
+						]}
+						numberOfLines={1}
+					>
+						{formatTodaySummary(todayShift)}
+					</Text>
+					{todayHours ? (
+						<Text
+							style={[
+								styles.todaySummaryHours,
+								{ color: colors.textSecondary },
+							]}
+						>
+							{todayHours}
+						</Text>
+					) : null}
+				</View>
+			) : null}
 
 			<MonthCalendar
 				cells={cells}
@@ -122,76 +200,114 @@ export function CalendarScreen () {
 				onSelectDate={handleSelectDate}
 			/>
 
-			<View style={styles.details}>
+			<View style={styles.below}>
+				{nextShiftLabel ? (
+					<Text
+						style={[styles.insight, { color: colors.textSecondary }]}
+					>
+						{nextShiftLabel}
+					</Text>
+				) : null}
+				{monthStats ? (
+					<Text
+						style={[styles.insight, { color: colors.textSecondary }]}
+					>
+						{formatMonthStats(monthStats)}
+					</Text>
+				) : null}
 				<DayDetails date={selectedDate} shift={selectedShift} />
 			</View>
 		</Screen>
 	)
 }
 
-type HeaderButtonProps = {
-	label: string
+type HeaderIconButtonProps = {
+	icon: 'chevron-back' | 'chevron-forward'
 	accessibilityLabel: string
 	onPress: () => void
-	disabled?: boolean
 }
 
-function HeaderButton ({
-	label,
+function HeaderIconButton ({
+	icon,
 	accessibilityLabel,
 	onPress,
-	disabled = false,
-}: HeaderButtonProps) {
+}: HeaderIconButtonProps) {
 	const { colors } = useTheme()
 	return (
 		<Pressable
 			accessibilityRole="button"
 			accessibilityLabel={accessibilityLabel}
-			disabled={disabled}
 			onPress={onPress}
+			hitSlop={4}
 			style={({ pressed }) => [
 				styles.headerButton,
 				{
 					backgroundColor: colors.surface,
 					borderColor: colors.border,
-					opacity: disabled ? 0.4 : pressed ? 0.85 : 1,
+					opacity: pressed ? 0.85 : 1,
 				},
 			]}
 		>
-			<Text
-				style={[styles.headerButtonLabel, { color: colors.primary }]}
-			>
-				{label}
-			</Text>
+			<Ionicons name={icon} size={26} color={colors.primary} />
 		</Pressable>
 	)
 }
 
 const styles = StyleSheet.create({
-	header: {
+	headerRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
 		marginBottom: spacing.sm,
-		gap: spacing.sm,
+		gap: spacing.xs,
 	},
 	title: {
 		...typography.title,
-	},
-	nav: {
-		flexDirection: 'row',
-		gap: spacing.xs,
+		flex: 1,
+		textAlign: 'center',
 	},
 	headerButton: {
 		minHeight: touchTarget.min,
 		minWidth: touchTarget.min,
-		paddingHorizontal: spacing.sm,
-		borderRadius: 10,
+		borderRadius: radius.md,
 		borderWidth: 1,
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	headerButtonLabel: {
+	todayButton: {
+		minHeight: touchTarget.min,
+		borderRadius: radius.md,
+		borderWidth: 1,
+		alignItems: 'center',
+		justifyContent: 'center',
+		marginBottom: spacing.sm,
+	},
+	todayButtonLabel: {
 		...typography.bodyStrong,
 	},
-	details: {
+	todaySummary: {
+		borderRadius: radius.md,
+		borderWidth: 1,
+		paddingHorizontal: spacing.md,
+		paddingVertical: spacing.sm,
+		marginBottom: spacing.md,
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: spacing.sm,
+	},
+	todaySummaryTitle: {
+		...typography.bodyStrong,
+		flex: 1,
+	},
+	todaySummaryHours: {
+		...typography.caption,
+	},
+	below: {
 		marginTop: spacing.md,
+		gap: spacing.xs,
+		paddingBottom: spacing.lg,
+	},
+	insight: {
+		...typography.caption,
 	},
 })
