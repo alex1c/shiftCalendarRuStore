@@ -1,11 +1,11 @@
 /**
- * Main calendar — current month derived from the saved cycle.
- * Insights (next shift, month stats) use the same engine as the grid.
+ * Main calendar — cycle engine plus one-day overrides.
  */
 
 import { useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { DayDetails } from '@/src/components/DayDetails'
 import { MonthCalendar } from '@/src/components/MonthCalendar'
@@ -21,11 +21,12 @@ import {
 	formatNextWorkShift,
 	formatShiftHours,
 	formatTodaySummary,
+	getEffectiveDay,
 	parseCalendarDate,
-	resolveShiftForDate,
 	todayCalendarDate,
 } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
+import type { CalendarStackParamList } from '@/src/navigation/types'
 import {
 	radius,
 	spacing,
@@ -34,9 +35,11 @@ import {
 	useTheme,
 } from '@/src/theme'
 
-export function CalendarScreen () {
+type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarHome'>
+
+export function CalendarScreen ({ navigation }: Props) {
 	const { colors } = useTheme()
-	const { schedule } = useAppBootstrap()
+	const { schedule, overrides, clearDayOverride } = useAppBootstrap()
 	const today = todayCalendarDate()
 	const todayParts = parseCalendarDate(today)
 
@@ -51,38 +54,62 @@ export function CalendarScreen () {
 		[visible.year, visible.month],
 	)
 
-	const shiftsByDate = useMemo(() => {
+	const daysByDate = useMemo(() => {
 		if (!schedule) {
 			return {}
 		}
 		return Object.fromEntries(
 			cells.map((cell) => [
 				cell.date,
-				resolveShiftForDate(schedule, cell.date),
+				getEffectiveDay(schedule, cell.date, overrides),
 			]),
 		)
-	}, [cells, schedule])
+	}, [cells, schedule, overrides])
 
-	const selectedShift = schedule
-		? resolveShiftForDate(schedule, selectedDate)
+	const shiftsByDate = useMemo(
+		() => Object.fromEntries(
+			Object.entries(daysByDate).map(([date, day]) => [date, day.shift]),
+		),
+		[daysByDate],
+	)
+
+	const overriddenDates = useMemo(
+		() => new Set(
+			Object.values(daysByDate)
+				.filter((day) => day.isOverridden)
+				.map((day) => day.date),
+		),
+		[daysByDate],
+	)
+
+	const selectedDay = schedule
+		? getEffectiveDay(schedule, selectedDate, overrides)
 		: null
-	const todayShift = schedule
-		? resolveShiftForDate(schedule, today)
+	const todayDay = schedule
+		? getEffectiveDay(schedule, today, overrides)
 		: null
 
 	const monthStats = useMemo(() => {
 		if (!schedule) {
 			return null
 		}
-		return computeMonthStats(schedule, visible.year, visible.month)
-	}, [schedule, visible.year, visible.month])
+		return computeMonthStats(
+			schedule,
+			visible.year,
+			visible.month,
+			overrides,
+		)
+	}, [schedule, visible.year, visible.month, overrides])
 
 	const nextShiftLabel = useMemo(() => {
 		if (!schedule) {
 			return null
 		}
-		return formatNextWorkShift(today, findNextWorkShift(schedule, today))
-	}, [schedule, today])
+		return formatNextWorkShift(
+			today,
+			findNextWorkShift(schedule, today, overrides),
+		)
+	}, [schedule, today, overrides])
 
 	const isCurrentMonth =
 		visible.year === todayParts.year &&
@@ -110,11 +137,16 @@ export function CalendarScreen () {
 		setSelectedDate(today)
 	}
 
-	if (!schedule || !selectedShift || !todayShift) {
+	const handleEditDate = (date: string) => {
+		handleSelectDate(date)
+		navigation.navigate('EditDay', { date })
+	}
+
+	if (!schedule || !selectedDay || !todayDay) {
 		return null
 	}
 
-	const todayHours = formatShiftHours(todayShift)
+	const todayHours = formatShiftHours(todayDay.shift)
 
 	return (
 		<Screen includeBottomSafeArea={false}>
@@ -177,7 +209,7 @@ export function CalendarScreen () {
 						]}
 						numberOfLines={1}
 					>
-						{formatTodaySummary(todayShift)}
+						{formatTodaySummary(todayDay.shift)}
 					</Text>
 					{todayHours ? (
 						<Text
@@ -195,9 +227,11 @@ export function CalendarScreen () {
 			<MonthCalendar
 				cells={cells}
 				shiftsByDate={shiftsByDate}
+				overriddenDates={overriddenDates}
 				todayDate={today}
 				selectedDate={selectedDate}
 				onSelectDate={handleSelectDate}
+				onEditDate={handleEditDate}
 			/>
 
 			<View style={styles.below}>
@@ -215,7 +249,17 @@ export function CalendarScreen () {
 						{formatMonthStats(monthStats)}
 					</Text>
 				) : null}
-				<DayDetails date={selectedDate} shift={selectedShift} />
+				<DayDetails
+					day={selectedDay}
+					onEdit={() => handleEditDate(selectedDate)}
+					onRestore={
+						selectedDay.isOverridden
+							? () => {
+								void clearDayOverride(selectedDate)
+							}
+							: undefined
+					}
+				/>
 			</View>
 		</Screen>
 	)

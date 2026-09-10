@@ -32,10 +32,11 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 3 — Calendar UX** is implemented.
+**Phase 4 — Day overrides** is implemented.
 
-The calendar is the main working screen: month navigation, today/selected
-states, day details with duration, next work shift, and compact month stats.
+A user can change a single day (vacation, sick, extra shift, overtime, …)
+without rewriting or shifting the repeating cycle. The cycle engine still
+owns the base shift; overrides are a date-keyed layer on top.
 
 ## Stack
 
@@ -104,4 +105,4 @@ UI never walks dates to compute a shift. The cycle engine uses
 
 Salary, extra profiles, family mode, PDF, share image, backup ZIP,
 restore, РСЯ, AppMetrica, production signing, widget, alarms,
-rich notifications, custom cycle editor, internet holidays, cloud sync.
+rich notifications, internet holidays, cloud sync, range vacation editor.

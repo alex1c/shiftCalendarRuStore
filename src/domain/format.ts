@@ -165,9 +165,12 @@ export function formatShiftTitle (shift: ShiftType): string {
 	return shift.name
 }
 
-/** Compact today line: `Сегодня — Ночная` / `Сегодня — выходной`. */
+/**
+ * Compact today line. Built-in days off stay «выходной»;
+ * vacation / sick / отгул use their own names.
+ */
 export function formatTodaySummary (shift: ShiftType): string {
-	if (shift.kind === 'off') {
+	if (shift.kind === 'off' && shift.color === 'off') {
 		return 'Сегодня — выходной'
 	}
 	return `Сегодня — ${shift.name}`

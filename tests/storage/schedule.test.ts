@@ -11,12 +11,18 @@ import {
 	createWorkScheduleFromCustom,
 	createWorkScheduleFromPreset,
 	requireSchedulePreset,
+	upsertOverride,
+	validateDayOverride,
+	buildDayOverride,
 } from '@/src/domain'
 import {
 	STORAGE_KEYS,
+	STORAGE_SCHEMA_VERSION,
 	clearAllStorageForTests,
 	clearWorkSchedule,
+	getDayOverrides,
 	getWorkSchedule,
+	saveDayOverrides,
 	saveWorkSchedule,
 } from '@/src/storage'
 
@@ -89,5 +95,77 @@ describe('work schedule storage', () => {
 			'evening',
 			SHIFT_TYPE_OFF_ID,
 		])
+	})
+})
+
+describe('day override storage', () => {
+	beforeEach(async () => {
+		await clearAllStorageForTests()
+	})
+
+	it('persists and reloads an override by date', async () => {
+		const checked = validateDayOverride({
+			date: '2026-09-12',
+			type: 'vacation',
+			note: 'Подмена за Сергея',
+		})
+		expect(checked.ok).toBe(true)
+		if (!checked.ok) {
+			return
+		}
+		const override = buildDayOverride(
+			checked.value,
+			null,
+			new Date('2026-09-01T12:00:00.000Z'),
+		)
+		await saveDayOverrides(upsertOverride({}, override))
+		const loaded = await getDayOverrides()
+		expect(loaded['2026-09-12']).toEqual(override)
+	})
+
+	it('clears overrides together with the schedule', async () => {
+		const schedule = createWorkScheduleFromPreset({
+			preset: requireSchedulePreset('2-2'),
+			startDate: '2026-09-01',
+		})
+		const checked = validateDayOverride({
+			date: '2026-09-01',
+			type: 'sick',
+		})
+		if (!checked.ok) {
+			throw new Error(checked.message)
+		}
+		await saveWorkSchedule(schedule)
+		await saveDayOverrides(
+			upsertOverride(
+				{},
+				buildDayOverride(checked.value, null),
+			),
+		)
+		await clearWorkSchedule()
+		await expect(getWorkSchedule()).resolves.toBeNull()
+		await expect(getDayOverrides()).resolves.toEqual({})
+	})
+
+	it('still loads a Phase 1 schedule after the schema bump', async () => {
+		const legacy = createWorkScheduleFromPreset({
+			preset: requireSchedulePreset('2-2'),
+			startDate: '2026-09-01',
+			now: new Date('2026-09-01T12:00:00.000Z'),
+		})
+		await AsyncStorage.setItem(
+			STORAGE_KEYS.meta,
+			JSON.stringify({ schemaVersion: 1 }),
+		)
+		await AsyncStorage.setItem(
+			STORAGE_KEYS.schedule,
+			JSON.stringify(legacy),
+		)
+		await expect(getWorkSchedule()).resolves.toEqual(legacy)
+		await expect(getDayOverrides()).resolves.toEqual({})
+		const metaRaw = await AsyncStorage.getItem(STORAGE_KEYS.meta)
+		expect(JSON.parse(metaRaw ?? '{}')).toEqual({
+			schemaVersion: STORAGE_SCHEMA_VERSION,
+		})
 	})
 })

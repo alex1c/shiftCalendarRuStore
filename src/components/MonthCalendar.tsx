@@ -1,6 +1,6 @@
 /**
- * Month grid. Each cell shows the day number and shift shortName.
- * Today, selected, and today+selected are distinct visual states.
+ * Month grid. Each cell shows the effective shortName.
+ * A tiny marker flags days that have a manual override.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native'
@@ -22,17 +22,21 @@ import {
 type MonthCalendarProps = {
 	cells: MonthGridCell[]
 	shiftsByDate: Record<string, ShiftType>
+	overriddenDates?: ReadonlySet<string>
 	todayDate: string
 	selectedDate: string
 	onSelectDate: (date: string) => void
+	onEditDate?: (date: string) => void
 }
 
 export function MonthCalendar ({
 	cells,
 	shiftsByDate,
+	overriddenDates,
 	todayDate,
 	selectedDate,
 	onSelectDate,
+	onEditDate,
 }: MonthCalendarProps) {
 	const { colors } = useTheme()
 	const rows: MonthGridCell[][] = []
@@ -75,6 +79,7 @@ export function MonthCalendar ({
 							const isSelected = cell.date === selectedDate
 							const isWeekend = column >= 5
 							const faded = !cell.inCurrentMonth && !isSelected
+							const isOverridden = overriddenDates?.has(cell.date) ?? false
 
 							let backgroundColor = palette.background
 							let borderColor = 'transparent'
@@ -100,11 +105,16 @@ export function MonthCalendar ({
 									accessibilityRole="button"
 									accessibilityLabel={
 										shift
-											? `${cell.day}, ${shift.name}`
+											? `${cell.day}, ${shift.name}${isOverridden ? ', изменено вручную' : ''}`
 											: String(cell.day)
 									}
 									accessibilityState={{ selected: isSelected }}
 									onPress={() => onSelectDate(cell.date)}
+									onLongPress={
+										onEditDate
+											? () => onEditDate(cell.date)
+											: undefined
+									}
 									style={[
 										styles.cell,
 										{
@@ -115,6 +125,14 @@ export function MonthCalendar ({
 										},
 									]}
 								>
+									{isOverridden ? (
+										<View
+											style={[
+												styles.overrideDot,
+												{ backgroundColor: colors.accent },
+											]}
+										/>
+									) : null}
 									<Text
 										style={[
 											styles.dayNumber,
@@ -176,6 +194,14 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 		paddingVertical: spacing.xxs,
+	},
+	overrideDot: {
+		position: 'absolute',
+		top: 4,
+		right: 4,
+		width: 6,
+		height: 6,
+		borderRadius: 3,
 	},
 	dayNumber: {
 		...typography.calendarDay,

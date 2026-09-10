@@ -1,7 +1,7 @@
 /**
- * Local persistence for the active work schedule.
+ * Local persistence for the active work schedule and day overrides.
  *
- * AsyncStorage is used on purpose for Phase 1: one JSON document, a clean
+ * AsyncStorage is used on purpose: one JSON document per key, a clean
  * repository API, and no native SQLite prepare/finalize races. The UI talks
  * only to this module, so a later SQLite migration will not rewrite screens.
  *
@@ -11,11 +11,16 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import type { WorkSchedule } from '@/src/types'
+import { emptyOverrideMap, isDayOverride } from '@/src/domain'
+import type { DayOverride, DayOverrideMap, WorkSchedule } from '@/src/types'
 import { STORAGE_KEYS, STORAGE_SCHEMA_VERSION } from './keys'
 
 type MetaState = {
 	schemaVersion: number
+}
+
+type StoredOverrides = {
+	byDate: DayOverrideMap
 }
 
 let migrated = false
@@ -43,6 +48,8 @@ async function writeJson (key: string, value: unknown): Promise<void> {
 
 /**
  * Ensure schema meta exists. Safe to call repeatedly.
+ * v1 → v2 only bumps the version; the schedule document is unchanged
+ * and missing overrides are treated as an empty map.
  */
 export async function ensureStorageMigrated (): Promise<void> {
 	if (migrated) {
@@ -83,6 +90,43 @@ function isWorkSchedule (value: unknown): value is WorkSchedule {
 	)
 }
 
+function normalizeOverride (value: DayOverride): DayOverride {
+	return {
+		id: value.id,
+		date: value.date,
+		type: value.type,
+		shiftTypeId: value.shiftTypeId ?? null,
+		startTime: value.startTime ?? null,
+		endTime: value.endTime ?? null,
+		breakMinutes: Number(value.breakMinutes) || 0,
+		overtimeMinutes: Number(value.overtimeMinutes) || 0,
+		customName: value.customName ?? null,
+		customShortName: value.customShortName ?? null,
+		isWork: value.isWork ?? null,
+		note: value.note ?? null,
+		createdAt: value.createdAt,
+		updatedAt: value.updatedAt,
+	}
+}
+
+function parseOverrideMap (value: unknown): DayOverrideMap {
+	if (!value || typeof value !== 'object') {
+		return emptyOverrideMap()
+	}
+	const record = value as Partial<StoredOverrides> & DayOverrideMap
+	const source =
+		record.byDate && typeof record.byDate === 'object'
+			? record.byDate
+			: (record as DayOverrideMap)
+	const next: DayOverrideMap = {}
+	for (const [date, item] of Object.entries(source)) {
+		if (isDayOverride(item) && item.date === date) {
+			next[date] = normalizeOverride(item)
+		}
+	}
+	return next
+}
+
 /**
  * Load the active schedule, or null when the user still needs onboarding.
  */
@@ -106,11 +150,27 @@ export async function saveWorkSchedule (
 }
 
 /**
- * Remove the saved schedule so the next launch returns to onboarding.
+ * Remove the saved schedule and its day overrides so onboarding can run.
  */
 export async function clearWorkSchedule (): Promise<void> {
 	await ensureStorageMigrated()
 	await AsyncStorage.removeItem(STORAGE_KEYS.schedule)
+	await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
+}
+
+/** Load date-keyed day overrides. Missing or corrupt data is an empty map. */
+export async function getDayOverrides (): Promise<DayOverrideMap> {
+	await ensureStorageMigrated()
+	const stored = await readJson<unknown>(STORAGE_KEYS.overrides)
+	return parseOverrideMap(stored)
+}
+
+/** Persist the full override map (one document, keyed by date). */
+export async function saveDayOverrides (
+	overrides: DayOverrideMap,
+): Promise<void> {
+	await ensureStorageMigrated()
+	await writeJson(STORAGE_KEYS.overrides, { byDate: overrides })
 }
 
 /** Test helper — wipe calendar keys. */
@@ -118,6 +178,7 @@ export async function clearAllStorageForTests (): Promise<void> {
 	await AsyncStorage.multiRemove([
 		STORAGE_KEYS.meta,
 		STORAGE_KEYS.schedule,
+		STORAGE_KEYS.overrides,
 	])
 	migrated = false
 }

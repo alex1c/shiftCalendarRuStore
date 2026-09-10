@@ -1,19 +1,20 @@
 /**
  * Selected-day summary under the month grid.
- * Duration and break copy come from domain helpers, not JSX math.
+ * Uses the effective day (cycle + optional override), not JSX math.
  */
 
 import { StyleSheet, Text, View } from 'react-native'
 
+import { AppButton } from '@/src/components/ui'
 import {
+	effectiveWorkMinutes,
 	formatDurationMinutes,
 	formatShiftHours,
 	formatShiftTitle,
 	formatWeekdayDayMonth,
-	isWorkShift,
-	workDurationMinutes,
+	isEffectiveWorkDay,
+	type EffectiveDay,
 } from '@/src/domain'
-import type { ShiftType } from '@/src/types'
 import {
 	radius,
 	shiftPalette,
@@ -23,20 +24,27 @@ import {
 } from '@/src/theme'
 
 type DayDetailsProps = {
-	date: string
-	shift: ShiftType
+	day: EffectiveDay
+	onEdit: () => void
+	onRestore?: () => void
 }
 
-export function DayDetails ({ date, shift }: DayDetailsProps) {
+export function DayDetails ({ day, onEdit, onRestore }: DayDetailsProps) {
 	const { colors } = useTheme()
+	const { shift, override, isOverridden } = day
 	const hours = formatShiftHours(shift)
 	const palette = shiftPalette(shift.color, colors)
-	const worked = workDurationMinutes(shift)
-	const showWork = isWorkShift(shift)
+	const showWork = isEffectiveWorkDay(day)
+	const worked = effectiveWorkMinutes(day)
+	const overtimeMinutes = override?.type === 'overtime'
+		? override.overtimeMinutes
+		: 0
 	const durationLabel = showWork
-		? shift.breakMinutes > 0
-			? `${formatDurationMinutes(worked)} работы`
-			: formatDurationMinutes(worked)
+		? override?.type === 'overtime'
+			? null
+			: shift.breakMinutes > 0
+				? `${formatDurationMinutes(worked)} работы`
+				: formatDurationMinutes(worked)
 		: null
 
 	return (
@@ -50,7 +58,7 @@ export function DayDetails ({ date, shift }: DayDetailsProps) {
 			]}
 		>
 			<Text style={[styles.date, { color: colors.textPrimary }]}>
-				{formatWeekdayDayMonth(date)}
+				{formatWeekdayDayMonth(day.date)}
 			</Text>
 			<View style={styles.row}>
 				<View
@@ -95,7 +103,7 @@ export function DayDetails ({ date, shift }: DayDetailsProps) {
 							{durationLabel}
 						</Text>
 					) : null}
-					{showWork && shift.breakMinutes > 0 ? (
+					{showWork && shift.breakMinutes > 0 && override?.type !== 'overtime' ? (
 						<Text
 							style={[
 								styles.hours,
@@ -105,8 +113,49 @@ export function DayDetails ({ date, shift }: DayDetailsProps) {
 							{`Перерыв: ${shift.breakMinutes} мин`}
 						</Text>
 					) : null}
+					{overtimeMinutes > 0 ? (
+						<Text
+							style={[
+								styles.hours,
+								{ color: colors.textSecondary },
+							]}
+						>
+							{`Переработка: ${formatDurationMinutes(overtimeMinutes)}`}
+						</Text>
+					) : null}
+					{isOverridden ? (
+						<Text
+							style={[
+								styles.hours,
+								{ color: colors.accent },
+							]}
+						>
+							Изменено вручную
+						</Text>
+					) : null}
+					{override?.note ? (
+						<Text
+							style={[
+								styles.note,
+								{ color: colors.textSecondary },
+							]}
+						>
+							{override.note}
+						</Text>
+					) : null}
 				</View>
 			</View>
+			<AppButton
+				label={isOverridden ? 'Изменить' : 'Изменить день'}
+				onPress={onEdit}
+			/>
+			{isOverridden && onRestore ? (
+				<AppButton
+					label="Вернуть по графику"
+					variant="secondary"
+					onPress={onRestore}
+				/>
+			) : null}
 		</View>
 	)
 }
@@ -146,5 +195,9 @@ const styles = StyleSheet.create({
 	},
 	hours: {
 		...typography.caption,
+	},
+	note: {
+		...typography.caption,
+		marginTop: 2,
 	},
 })

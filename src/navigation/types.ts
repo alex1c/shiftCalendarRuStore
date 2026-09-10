@@ -22,8 +22,13 @@ export type MoreStackParamList = {
 	About: undefined
 }
 
+export type CalendarStackParamList = {
+	CalendarHome: undefined
+	EditDay: { date: string }
+}
+
 export type MainTabParamList = {
-	Calendar: undefined
+	Calendar: NavigatorScreenParams<CalendarStackParamList> | undefined
 	Today: undefined
 	Stats: undefined
 	More: NavigatorScreenParams<MoreStackParamList> | undefined

@@ -1,14 +1,18 @@
 /**
- * Calendar insights derived from the existing cycle engine.
- * Does not pre-generate years of dates — only the visible month
- * and a bounded forward scan for the next work shift.
+ * Calendar insights derived from the existing cycle engine
+ * plus optional one-day overrides. Does not pre-generate years of dates.
  */
 
-import type { ShiftType, WorkSchedule } from '@/src/types'
-import { resolveShiftForDate } from './cycle'
+import type { DayOverrideMap, ShiftType, WorkSchedule } from '@/src/types'
 import { addCalendarDays, calendarDaysBetween, daysInMonth, formatCalendarDate } from './dates'
-import { formatDurationMinutes, isWorkShift, workDurationMinutes } from './duration'
+import { formatDurationMinutes, isWorkShift } from './duration'
 import { formatDayMonth, ruPlural } from './format'
+import {
+	effectiveWorkMinutes,
+	getEffectiveDay,
+	isEffectiveWorkDay,
+	overridesHaveWork,
+} from './overrides'
 
 export const NEXT_SHIFT_SEARCH_DAYS = 366
 
@@ -31,21 +35,22 @@ export function cycleHasWorkShift (schedule: WorkSchedule): boolean {
 }
 
 /**
- * First work day strictly after `fromDate`.
- * Bound: 366 days, but all-off cycles return immediately.
+ * First work day strictly after `fromDate`, honoring overrides.
+ * Bound: 366 days. All-off cycles with no work overrides return immediately.
  */
 export function findNextWorkShift (
 	schedule: WorkSchedule,
 	fromDate: string,
+	overrides: DayOverrideMap = {},
 ): NextWorkShift {
-	if (!cycleHasWorkShift(schedule)) {
+	if (!cycleHasWorkShift(schedule) && !overridesHaveWork(overrides)) {
 		return { found: false }
 	}
 	for (let offset = 1; offset <= NEXT_SHIFT_SEARCH_DAYS; offset += 1) {
 		const date = addCalendarDays(fromDate, offset)
-		const shift = resolveShiftForDate(schedule, date)
-		if (isWorkShift(shift)) {
-			return { found: true, date, shift }
+		const day = getEffectiveDay(schedule, date, overrides)
+		if (isEffectiveWorkDay(day)) {
+			return { found: true, date, shift: day.shift }
 		}
 	}
 	return { found: false }
@@ -53,12 +58,13 @@ export function findNextWorkShift (
 
 /**
  * Stats for civil days that belong to `year`/`month` (1–12).
- * Adjacent-month grid padding is ignored.
+ * Adjacent-month grid padding is ignored. Overrides replace the cycle.
  */
 export function computeMonthStats (
 	schedule: WorkSchedule,
 	year: number,
 	month: number,
+	overrides: DayOverrideMap = {},
 ): MonthStats {
 	const days = daysInMonth(year, month)
 	let workShifts = 0
@@ -66,10 +72,10 @@ export function computeMonthStats (
 	let workMinutes = 0
 	for (let day = 1; day <= days; day += 1) {
 		const date = formatCalendarDate(year, month, day)
-		const shift = resolveShiftForDate(schedule, date)
-		if (isWorkShift(shift)) {
+		const effective = getEffectiveDay(schedule, date, overrides)
+		if (isEffectiveWorkDay(effective)) {
 			workShifts += 1
-			workMinutes += workDurationMinutes(shift)
+			workMinutes += effectiveWorkMinutes(effective)
 		} else {
 			offDays += 1
 		}

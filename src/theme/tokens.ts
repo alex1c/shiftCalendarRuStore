@@ -136,6 +136,16 @@ export const colors = {
 		shiftLateFg: '#3A3F6B',
 		shiftAccentBg: '#F0D6C8',
 		shiftAccentFg: '#7A3E24',
+		shiftVacationBg: '#D7E4D0',
+		shiftVacationFg: '#3A5A32',
+		shiftSickBg: '#F3D9D4',
+		shiftSickFg: '#8A3A32',
+		shiftDayOffBg: '#E8DCC8',
+		shiftDayOffFg: '#6A5428',
+		shiftExtraBg: '#F4E0B8',
+		shiftExtraFg: '#6B4E10',
+		shiftOvertimeBg: '#DDD4EC',
+		shiftOvertimeFg: '#4A3A6B',
 	},
 	dark: {
 		background: '#161412',
@@ -176,6 +186,16 @@ export const colors = {
 		shiftLateFg: '#C3C7E8',
 		shiftAccentBg: '#3A261C',
 		shiftAccentFg: '#E8C0A8',
+		shiftVacationBg: '#2A3A28',
+		shiftVacationFg: '#C5DDB8',
+		shiftSickBg: '#3A2422',
+		shiftSickFg: '#E8B4AE',
+		shiftDayOffBg: '#3A3224',
+		shiftDayOffFg: '#E0CFA8',
+		shiftExtraBg: '#3F3214',
+		shiftExtraFg: '#F0D08A',
+		shiftOvertimeBg: '#2C243C',
+		shiftOvertimeFg: '#C8B8E8',
 	},
 } as const
 
@@ -220,6 +240,16 @@ export type ThemeColors = {
 	shiftLateFg: string
 	shiftAccentBg: string
 	shiftAccentFg: string
+	shiftVacationBg: string
+	shiftVacationFg: string
+	shiftSickBg: string
+	shiftSickFg: string
+	shiftDayOffBg: string
+	shiftDayOffFg: string
+	shiftExtraBg: string
+	shiftExtraFg: string
+	shiftOvertimeBg: string
+	shiftOvertimeFg: string
 }
 
 /** Map a shift kind / color token to chip colors for the active scheme. */
@@ -262,6 +292,31 @@ export function shiftPalette (
 			return {
 				background: themeColors.shiftAccentBg,
 				foreground: themeColors.shiftAccentFg,
+			}
+		case 'vacation':
+			return {
+				background: themeColors.shiftVacationBg,
+				foreground: themeColors.shiftVacationFg,
+			}
+		case 'sick':
+			return {
+				background: themeColors.shiftSickBg,
+				foreground: themeColors.shiftSickFg,
+			}
+		case 'dayOff':
+			return {
+				background: themeColors.shiftDayOffBg,
+				foreground: themeColors.shiftDayOffFg,
+			}
+		case 'extra':
+			return {
+				background: themeColors.shiftExtraBg,
+				foreground: themeColors.shiftExtraFg,
+			}
+		case 'overtime':
+			return {
+				background: themeColors.shiftOvertimeBg,
+				foreground: themeColors.shiftOvertimeFg,
 			}
 		case 'day':
 		default:

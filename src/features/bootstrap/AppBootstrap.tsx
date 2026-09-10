@@ -1,5 +1,5 @@
 /**
- * App bootstrap — load the persisted schedule once and expose refresh.
+ * App bootstrap — load the persisted schedule and day overrides once.
  */
 
 import {
@@ -13,27 +13,36 @@ import {
 } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
+import { emptyOverrideMap, removeOverrideAtDate, upsertOverride } from '@/src/domain'
 import {
 	clearWorkSchedule,
+	getDayOverrides,
 	getWorkSchedule,
+	saveDayOverrides,
 	saveWorkSchedule,
 } from '@/src/storage'
 import { colors } from '@/src/theme'
-import type { WorkSchedule } from '@/src/types'
+import type { DayOverride, DayOverrideMap, WorkSchedule } from '@/src/types'
 
 type AppBootstrapValue = {
 	schedule: WorkSchedule | null
+	overrides: DayOverrideMap
 	ready: boolean
 	refreshSchedule: () => Promise<void>
 	persistSchedule: (schedule: WorkSchedule) => Promise<void>
+	persistDayOverride: (override: DayOverride) => Promise<void>
+	clearDayOverride: (date: string) => Promise<void>
 	resetSchedule: () => Promise<void>
 }
 
 const AppBootstrapContext = createContext<AppBootstrapValue>({
 	schedule: null,
+	overrides: emptyOverrideMap(),
 	ready: false,
 	refreshSchedule: async () => undefined,
 	persistSchedule: async () => undefined,
+	persistDayOverride: async () => undefined,
+	clearDayOverride: async () => undefined,
 	resetSchedule: async () => undefined,
 })
 
@@ -45,11 +54,14 @@ export function AppBootstrapProvider ({
 	children,
 }: AppBootstrapProviderProps) {
 	const [schedule, setSchedule] = useState<WorkSchedule | null>(null)
+	const [overrides, setOverrides] = useState<DayOverrideMap>(emptyOverrideMap)
 	const [ready, setReady] = useState(false)
 
 	const refreshSchedule = useCallback(async () => {
-		const next = await getWorkSchedule()
-		setSchedule(next)
+		const nextSchedule = await getWorkSchedule()
+		const nextOverrides = await getDayOverrides()
+		setSchedule(nextSchedule)
+		setOverrides(nextOverrides)
 	}, [])
 
 	const persistSchedule = useCallback(async (next: WorkSchedule) => {
@@ -57,22 +69,38 @@ export function AppBootstrapProvider ({
 		setSchedule(next)
 	}, [])
 
+	const persistDayOverride = useCallback(async (override: DayOverride) => {
+		const next = upsertOverride(overrides, override)
+		await saveDayOverrides(next)
+		setOverrides(next)
+	}, [overrides])
+
+	const clearDayOverride = useCallback(async (date: string) => {
+		const next = removeOverrideAtDate(overrides, date)
+		await saveDayOverrides(next)
+		setOverrides(next)
+	}, [overrides])
+
 	const resetSchedule = useCallback(async () => {
 		await clearWorkSchedule()
 		setSchedule(null)
+		setOverrides(emptyOverrideMap())
 	}, [])
 
 	useEffect(() => {
 		let cancelled = false
 		void (async () => {
 			try {
-				const next = await getWorkSchedule()
+				const nextSchedule = await getWorkSchedule()
+				const nextOverrides = await getDayOverrides()
 				if (!cancelled) {
-					setSchedule(next)
+					setSchedule(nextSchedule)
+					setOverrides(nextOverrides)
 				}
 			} catch {
 				if (!cancelled) {
 					setSchedule(null)
+					setOverrides(emptyOverrideMap())
 				}
 			} finally {
 				if (!cancelled) {
@@ -88,12 +116,24 @@ export function AppBootstrapProvider ({
 	const value = useMemo(
 		() => ({
 			schedule,
+			overrides,
 			ready,
 			refreshSchedule,
 			persistSchedule,
+			persistDayOverride,
+			clearDayOverride,
 			resetSchedule,
 		}),
-		[schedule, ready, refreshSchedule, persistSchedule, resetSchedule],
+		[
+			schedule,
+			overrides,
+			ready,
+			refreshSchedule,
+			persistSchedule,
+			persistDayOverride,
+			clearDayOverride,
+			resetSchedule,
+		],
 	)
 
 	if (!ready) {

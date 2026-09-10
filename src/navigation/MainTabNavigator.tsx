@@ -5,10 +5,10 @@
 import { Ionicons } from '@expo/vector-icons'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 
-import { CalendarScreen } from '@/src/screens/CalendarScreen'
 import { StatsScreen } from '@/src/screens/StatsScreen'
 import { TodayScreen } from '@/src/screens/TodayScreen'
 import { useTheme } from '@/src/theme'
+import { CalendarNavigator } from './CalendarNavigator'
 import { MoreNavigator } from './MoreNavigator'
 import type { MainTabParamList } from './types'
 
@@ -39,7 +39,7 @@ export function MainTabNavigator () {
 		>
 			<Tab.Screen
 				name="Calendar"
-				component={CalendarScreen}
+				component={CalendarNavigator}
 				options={{
 					title: 'Календарь',
 					tabBarIcon: ({ color, size }) => (

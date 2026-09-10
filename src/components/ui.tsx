@@ -121,6 +121,7 @@ type TextFieldProps = {
 	autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
 	keyboardType?: 'default' | 'number-pad' | 'numeric'
 	accessibilityLabel?: string
+	multiline?: boolean
 }
 
 export function AppTextField ({
@@ -133,6 +134,7 @@ export function AppTextField ({
 	autoCapitalize = 'sentences',
 	keyboardType = 'default',
 	accessibilityLabel,
+	multiline = false,
 }: TextFieldProps) {
 	const { colors } = useTheme()
 	return (
@@ -150,8 +152,11 @@ export function AppTextField ({
 				autoCapitalize={autoCapitalize}
 				autoCorrect={false}
 				keyboardType={keyboardType}
+				multiline={multiline}
+				textAlignVertical={multiline ? 'top' : 'center'}
 				style={[
 					styles.fieldInput,
+					multiline ? styles.fieldInputMultiline : null,
 					{
 						color: colors.textPrimary,
 						backgroundColor: colors.surface,
@@ -227,6 +232,10 @@ const styles = StyleSheet.create({
 		borderRadius: radius.sm,
 		paddingHorizontal: spacing.sm,
 		...typography.body,
+	},
+	fieldInputMultiline: {
+		minHeight: 96,
+		paddingVertical: spacing.sm,
 	},
 	fieldError: {
 		...typography.caption,
