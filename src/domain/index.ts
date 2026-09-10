@@ -152,3 +152,17 @@ export {
 	type ShiftTimeWindow,
 	type TodayOverview,
 } from './today'
+export {
+	MAX_STATS_SPAN_DAYS,
+	STATS_PERIOD_OPTIONS,
+	computePeriodStats,
+	emptyPeriodStats,
+	formatCivilRange,
+	formatDayCount,
+	formatStatsPeriodLabel,
+	formatWorkHours,
+	resolveStatsPeriod,
+	type CivilRange,
+	type PeriodStats,
+	type StatsPeriodKind,
+} from './stats'

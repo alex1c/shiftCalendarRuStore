@@ -32,11 +32,11 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 5 — Today tab** is implemented.
+**Phase 6 — Statistics tab** is implemented.
 
-The Сегодня screen shows the effective day (cycle + overrides), a
-countdown around the current shift including overnight, next work shift,
-and tomorrow — without opening the calendar.
+The Статистика screen totals effective days for 7/30/90 days, the current
+month, the current year, or startDate→today: work shifts and hours,
+day/night/other, offs, vacation, sick, day-off, extra shifts, overtime.
 
 ## Stack
 
