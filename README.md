@@ -1,4 +1,4 @@
-# Календарь смен
+# Мой график смен
 
 Офлайн-календарь рабочих графиков для Android / RuStore (ForestMusic).
 
@@ -16,7 +16,7 @@ Internal name: **Shift Calendar**
 | GitHub (source of truth) | https://github.com/alex1c/shiftCalendarRuStore |
 | Default branch | `main` |
 | Android package | `com.calculatorplatform.shiftcalendar` |
-| Display name | Календарь смен |
+| Display name | Мой график смен |
 | Version | `1.0.0` (versionCode `1`) |
 
 **GitHub is the source of truth.** Sync both machines through `origin/main`.
@@ -32,11 +32,11 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 4 — Day overrides** is implemented.
+**Phase 5 — Today tab** is implemented.
 
-A user can change a single day (vacation, sick, extra shift, overtime, …)
-without rewriting or shifting the repeating cycle. The cycle engine still
-owns the base shift; overrides are a date-keyed layer on top.
+The Сегодня screen shows the effective day (cycle + overrides), a
+countdown around the current shift including overnight, next work shift,
+and tomorrow — without opening the calendar.
 
 ## Stack
 

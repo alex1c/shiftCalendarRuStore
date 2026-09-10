@@ -95,6 +95,7 @@ export {
 	isValidClockTime,
 	parseClockTime,
 	shiftDurationMinutes,
+	localDateTimeFromCalendarClock,
 } from './time'
 export {
 	formatDurationMinutes,
@@ -141,3 +142,13 @@ export type {
 	DayOverrideMap,
 	DayOverrideType,
 } from '@/src/types'
+export {
+	formatCountdown,
+	getCurrentShiftState,
+	getShiftTimeWindow,
+	getTodayOverview,
+	type CurrentShiftState,
+	type ShiftTimeStateKind,
+	type ShiftTimeWindow,
+	type TodayOverview,
+} from './today'

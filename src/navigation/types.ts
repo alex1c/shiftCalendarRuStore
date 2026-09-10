@@ -23,7 +23,7 @@ export type MoreStackParamList = {
 }
 
 export type CalendarStackParamList = {
-	CalendarHome: undefined
+	CalendarHome: { focusDate?: string } | undefined
 	EditDay: { date: string }
 }
 

@@ -15,7 +15,7 @@ export function AboutScreen () {
 		<Screen includeBottomSafeArea={false}>
 			<SurfaceCard>
 				<Text style={[styles.name, { color: colors.textPrimary }]}>
-					Календарь смен
+					Мой график смен
 				</Text>
 				<Text
 					style={[styles.meta, { color: colors.textSecondary }]}

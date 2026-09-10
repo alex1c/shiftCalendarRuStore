@@ -3,6 +3,8 @@
  * Times are civil `HH:mm` strings; overnight ranges are allowed.
  */
 
+import { parseCalendarDate } from './dates'
+
 const TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/
 const MINUTES_PER_DAY = 24 * 60
 
@@ -74,6 +76,30 @@ export function clockTimeToDate (
 		now.getFullYear(),
 		now.getMonth(),
 		now.getDate(),
+		parsed.hours,
+		parsed.minutes,
+		0,
+		0,
+	)
+}
+
+/**
+ * Civil date + `HH:mm` as a local Date.
+ * User-facing 08:00 stays 08:00 on the device clock (no UTC conversion).
+ */
+export function localDateTimeFromCalendarClock (
+	iso: string,
+	clock: string,
+): Date {
+	const { year, month, day } = parseCalendarDate(iso)
+	const parsed = parseClockTime(clock)
+	if (!parsed) {
+		throw new Error(`Invalid clock time: ${clock}`)
+	}
+	return new Date(
+		year,
+		month - 1,
+		day,
 		parsed.hours,
 		parsed.minutes,
 		0,

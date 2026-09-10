@@ -2,9 +2,10 @@
  * Main calendar — cycle engine plus one-day overrides.
  */
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
+import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { DayDetails } from '@/src/components/DayDetails'
@@ -37,7 +38,7 @@ import {
 
 type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarHome'>
 
-export function CalendarScreen ({ navigation }: Props) {
+export function CalendarScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
 	const { schedule, overrides, clearDayOverride } = useAppBootstrap()
 	const today = todayCalendarDate()
@@ -48,6 +49,28 @@ export function CalendarScreen ({ navigation }: Props) {
 		month: todayParts.month,
 	})
 	const [selectedDate, setSelectedDate] = useState(today)
+
+	const handleSelectDate = useCallback((date: string) => {
+		const parts = parseCalendarDate(date)
+		setSelectedDate(date)
+		setVisible((current) => {
+			if (parts.year === current.year && parts.month === current.month) {
+				return current
+			}
+			return { year: parts.year, month: parts.month }
+		})
+	}, [])
+
+	useFocusEffect(
+		useCallback(() => {
+			const focusDate = route.params?.focusDate
+			if (!focusDate) {
+				return
+			}
+			handleSelectDate(focusDate)
+			navigation.setParams({ focusDate: undefined })
+		}, [handleSelectDate, navigation, route.params?.focusDate]),
+	)
 
 	const cells = useMemo(
 		() => buildMonthGrid(visible.year, visible.month),
@@ -121,14 +144,6 @@ export function CalendarScreen ({ navigation }: Props) {
 		const selected = parseCalendarDate(selectedDate)
 		if (selected.year !== next.year || selected.month !== next.month) {
 			setSelectedDate(formatCalendarDate(next.year, next.month, 1))
-		}
-	}
-
-	const handleSelectDate = (date: string) => {
-		const parts = parseCalendarDate(date)
-		setSelectedDate(date)
-		if (parts.year !== visible.year || parts.month !== visible.month) {
-			setVisible({ year: parts.year, month: parts.month })
 		}
 	}
 
