@@ -11,7 +11,13 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
-import { emptyOverrideMap, isDayOverride } from '@/src/domain'
+import {
+	emptyOverrideMap,
+	isDayOverride,
+	isSalarySettings,
+	SALARY_SCHEMA_VERSION,
+	type SalarySettings,
+} from '@/src/domain'
 import type { DayOverride, DayOverrideMap, WorkSchedule } from '@/src/types'
 import { STORAGE_KEYS, STORAGE_SCHEMA_VERSION } from './keys'
 
@@ -151,11 +157,65 @@ export async function saveWorkSchedule (
 
 /**
  * Remove the saved schedule and its day overrides so onboarding can run.
+ * Salary settings are kept: the rate usually survives a schedule reset.
  */
 export async function clearWorkSchedule (): Promise<void> {
 	await ensureStorageMigrated()
 	await AsyncStorage.removeItem(STORAGE_KEYS.schedule)
 	await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
+}
+
+type StoredSalary = {
+	schemaVersion: number
+	settings: SalarySettings
+}
+
+function parseSalarySettings (value: unknown): SalarySettings | null {
+	if (!value || typeof value !== 'object') {
+		return null
+	}
+	const record = value as Partial<StoredSalary> & Partial<SalarySettings>
+	const nested = record.settings
+	const candidate = isSalarySettings(nested)
+		? nested
+		: isSalarySettings(record)
+			? record
+			: null
+	if (!candidate) {
+		return null
+	}
+	if (
+		typeof record.schemaVersion === 'number' &&
+		record.schemaVersion > SALARY_SCHEMA_VERSION
+	) {
+		return candidate
+	}
+	return candidate
+}
+
+/** Load salary settings. Missing or corrupt JSON is treated as unset. */
+export async function getSalarySettings (): Promise<SalarySettings | null> {
+	await ensureStorageMigrated()
+	const stored = await readJson<unknown>(STORAGE_KEYS.salary)
+	return parseSalarySettings(stored)
+}
+
+/** Persist versioned salary settings (separate from the schedule document). */
+export async function saveSalarySettings (
+	settings: SalarySettings,
+): Promise<void> {
+	await ensureStorageMigrated()
+	const payload: StoredSalary = {
+		schemaVersion: SALARY_SCHEMA_VERSION,
+		settings,
+	}
+	await writeJson(STORAGE_KEYS.salary, payload)
+}
+
+/** User-initiated wipe of payment settings only. */
+export async function clearSalarySettings (): Promise<void> {
+	await ensureStorageMigrated()
+	await AsyncStorage.removeItem(STORAGE_KEYS.salary)
 }
 
 /** Load date-keyed day overrides. Missing or corrupt data is an empty map. */
@@ -173,12 +233,13 @@ export async function saveDayOverrides (
 	await writeJson(STORAGE_KEYS.overrides, { byDate: overrides })
 }
 
-/** Test helper — wipe calendar keys. */
+/** Test helper — wipe calendar and salary keys. */
 export async function clearAllStorageForTests (): Promise<void> {
 	await AsyncStorage.multiRemove([
 		STORAGE_KEYS.meta,
 		STORAGE_KEYS.schedule,
 		STORAGE_KEYS.overrides,
+		STORAGE_KEYS.salary,
 	])
 	migrated = false
 }

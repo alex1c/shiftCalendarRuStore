@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import {
 	Pressable,
 	StyleSheet,
+	Switch,
 	Text,
 	TextInput,
 	View,
@@ -119,7 +120,7 @@ type TextFieldProps = {
 	error?: string
 	maxLength?: number
 	autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters'
-	keyboardType?: 'default' | 'number-pad' | 'numeric'
+	keyboardType?: 'default' | 'number-pad' | 'numeric' | 'decimal-pad'
 	accessibilityLabel?: string
 	multiline?: boolean
 }
@@ -169,6 +170,42 @@ export function AppTextField ({
 					{error}
 				</Text>
 			) : null}
+		</View>
+	)
+}
+
+type SwitchRowProps = {
+	label: string
+	value: boolean
+	onValueChange: (value: boolean) => void
+	accessibilityLabel?: string
+}
+
+/** Themed labelled switch used by optional salary extras. */
+export function AppSwitchRow ({
+	label,
+	value,
+	onValueChange,
+	accessibilityLabel,
+}: SwitchRowProps) {
+	const { colors } = useTheme()
+	return (
+		<View style={styles.switchRow}>
+			<Text
+				style={[styles.switchLabel, { color: colors.textPrimary }]}
+			>
+				{label}
+			</Text>
+			<Switch
+				accessibilityLabel={accessibilityLabel ?? label}
+				value={value}
+				onValueChange={onValueChange}
+				trackColor={{
+					false: colors.surfaceMuted,
+					true: colors.primaryMuted,
+				}}
+				thumbColor={value ? colors.primary : colors.border}
+			/>
 		</View>
 	)
 }
@@ -258,5 +295,16 @@ const styles = StyleSheet.create({
 	},
 	secondaryLabel: {
 		...typography.body,
+	},
+	switchRow: {
+		minHeight: touchTarget.min,
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: spacing.sm,
+	},
+	switchLabel: {
+		...typography.bodyStrong,
+		flex: 1,
 	},
 })

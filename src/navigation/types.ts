@@ -18,6 +18,8 @@ export type OnboardingStackParamList = {
 export type MoreStackParamList = {
 	MoreHome: undefined
 	MySchedule: undefined
+	Salary: undefined
+	SalarySettings: undefined
 	Learning: undefined
 	About: undefined
 }

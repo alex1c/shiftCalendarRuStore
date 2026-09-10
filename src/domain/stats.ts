@@ -112,7 +112,14 @@ export function resolveStatsPeriod (
 	}
 }
 
-function clampRange (startDate: string, endDate: string): CivilRange | null {
+/**
+ * Inclusive civil range with the same span cap as period stats.
+ * Empty when start is after end; over-long ranges keep the last N days.
+ */
+export function clampCivilRange (
+	startDate: string,
+	endDate: string,
+): CivilRange | null {
 	const span = calendarDaysBetween(startDate, endDate)
 	if (span < 0) {
 		return null
@@ -147,7 +154,7 @@ export function computePeriodStats (
 	startDate: string,
 	endDate: string,
 ): PeriodStats {
-	const range = clampRange(startDate, endDate)
+	const range = clampCivilRange(startDate, endDate)
 	if (!range) {
 		return emptyPeriodStats()
 	}

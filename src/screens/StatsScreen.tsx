@@ -7,14 +7,17 @@ import { Pressable, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
+import { PeriodChips } from '@/src/components/PeriodChips'
 import { Screen } from '@/src/components/Screen'
-import { AppButton, SurfaceCard } from '@/src/components/ui'
+import { AppButton, SecondaryLink, SurfaceCard } from '@/src/components/ui'
 import {
-	STATS_PERIOD_OPTIONS,
 	computePeriodStats,
+	computeSalaryForPeriod,
 	formatDayCount,
+	formatRublesFromMinor,
 	formatStatsPeriodLabel,
 	formatWorkHours,
+	isSalaryEnabled,
 	ruPlural,
 	resolveStatsPeriod,
 	type StatsPeriodKind,
@@ -22,9 +25,7 @@ import {
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import type { MainTabParamList } from '@/src/navigation/types'
 import {
-	radius,
 	spacing,
-	touchTarget,
 	typography,
 	useTheme,
 } from '@/src/theme'
@@ -33,7 +34,7 @@ export function StatsScreen () {
 	const { colors } = useTheme()
 	const navigation =
 		useNavigation<BottomTabNavigationProp<MainTabParamList, 'Stats'>>()
-	const { schedule, overrides } = useAppBootstrap()
+	const { schedule, overrides, salarySettings } = useAppBootstrap()
 	const [period, setPeriod] = useState<StatsPeriodKind>('30')
 	const [now, setNow] = useState(() => new Date())
 
@@ -61,6 +62,23 @@ export function StatsScreen () {
 			range.endDate,
 		)
 	}, [schedule, overrides, range])
+
+	const salaryTotals = useMemo(() => {
+		if (
+			!schedule ||
+			!range ||
+			!isSalaryEnabled(salarySettings)
+		) {
+			return null
+		}
+		return computeSalaryForPeriod(
+			schedule,
+			overrides,
+			salarySettings,
+			range.startDate,
+			range.endDate,
+		)
+	}, [schedule, overrides, range, salarySettings])
 
 	if (!schedule) {
 		return (
@@ -110,44 +128,7 @@ export function StatsScreen () {
 			>
 				Статистика
 			</Text>
-			<View style={styles.chips}>
-				{STATS_PERIOD_OPTIONS.map((option) => {
-					const selected = period === option.kind
-					return (
-						<Pressable
-							key={option.kind}
-							accessibilityRole="button"
-							accessibilityState={{ selected }}
-							onPress={() => setPeriod(option.kind)}
-							style={({ pressed }) => [
-								styles.chip,
-								{
-									backgroundColor: selected
-										? colors.primaryMuted
-										: colors.surface,
-									borderColor: selected
-										? colors.primary
-										: colors.border,
-									opacity: pressed ? 0.85 : 1,
-								},
-							]}
-						>
-							<Text
-								style={[
-									styles.chipLabel,
-									{
-										color: selected
-											? colors.primary
-											: colors.textPrimary,
-									},
-								]}
-							>
-								{option.label}
-							</Text>
-						</Pressable>
-					)
-				})}
-			</View>
+			<PeriodChips value={period} onChange={setPeriod} />
 			<Text style={[styles.range, { color: colors.textSecondary }]}>
 				{periodLabel}
 			</Text>
@@ -184,6 +165,46 @@ export function StatsScreen () {
 					value={String(stats.offDays)}
 				/>
 			</SurfaceCard>
+
+			{salaryTotals ? (
+				<Pressable
+					accessibilityRole="button"
+					accessibilityLabel="Расчётный заработок"
+					onPress={() => {
+						navigation.navigate('More', { screen: 'Salary' })
+					}}
+				>
+					<SurfaceCard style={styles.salaryCard}>
+						<Text
+							style={[
+								styles.salaryLabel,
+								{ color: colors.textTertiary },
+							]}
+						>
+							Расчётный заработок
+						</Text>
+						<Text
+							style={[
+								styles.salaryValue,
+								{ color: colors.textPrimary },
+							]}
+						>
+							{formatRublesFromMinor(salaryTotals.totalPayMinor)}
+						</Text>
+					</SurfaceCard>
+				</Pressable>
+			) : (
+				<View style={styles.salarySetup}>
+					<SecondaryLink
+						label="Настроить расчёт зарплаты"
+						onPress={() => {
+							navigation.navigate('More', {
+								screen: 'Salary',
+							})
+						}}
+					/>
+				</View>
+			)}
 
 			{secondary.length > 0 ? (
 				<SurfaceCard style={styles.breakdown}>
@@ -236,23 +257,6 @@ const styles = StyleSheet.create({
 		...typography.title,
 		marginBottom: spacing.sm,
 	},
-	chips: {
-		flexDirection: 'row',
-		flexWrap: 'wrap',
-		gap: spacing.xs,
-		marginBottom: spacing.sm,
-	},
-	chip: {
-		minHeight: touchTarget.min,
-		paddingHorizontal: spacing.md,
-		borderRadius: radius.md,
-		borderWidth: 1.5,
-		alignItems: 'center',
-		justifyContent: 'center',
-	},
-	chipLabel: {
-		...typography.bodyStrong,
-	},
 	range: {
 		...typography.caption,
 		marginBottom: spacing.md,
@@ -272,6 +276,19 @@ const styles = StyleSheet.create({
 	},
 	breakdown: {
 		gap: spacing.sm,
+		marginBottom: spacing.sm,
+	},
+	salaryCard: {
+		gap: spacing.xxs,
+		marginBottom: spacing.sm,
+	},
+	salaryLabel: {
+		...typography.label,
+	},
+	salaryValue: {
+		...typography.subtitle,
+	},
+	salarySetup: {
 		marginBottom: spacing.sm,
 	},
 	row: {

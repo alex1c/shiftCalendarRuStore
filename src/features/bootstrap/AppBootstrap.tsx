@@ -1,5 +1,6 @@
 /**
- * App bootstrap — load the persisted schedule and day overrides once.
+ * App bootstrap — load the persisted schedule, day overrides and salary
+ * settings once. Native storage reads stay sequential.
  */
 
 import {
@@ -13,12 +14,20 @@ import {
 } from 'react'
 import { ActivityIndicator, StyleSheet, View } from 'react-native'
 
-import { emptyOverrideMap, removeOverrideAtDate, upsertOverride } from '@/src/domain'
 import {
+	emptyOverrideMap,
+	removeOverrideAtDate,
+	upsertOverride,
+	type SalarySettings,
+} from '@/src/domain'
+import {
+	clearSalarySettings,
 	clearWorkSchedule,
 	getDayOverrides,
+	getSalarySettings,
 	getWorkSchedule,
 	saveDayOverrides,
+	saveSalarySettings,
 	saveWorkSchedule,
 } from '@/src/storage'
 import { colors } from '@/src/theme'
@@ -27,22 +36,28 @@ import type { DayOverride, DayOverrideMap, WorkSchedule } from '@/src/types'
 type AppBootstrapValue = {
 	schedule: WorkSchedule | null
 	overrides: DayOverrideMap
+	salarySettings: SalarySettings | null
 	ready: boolean
 	refreshSchedule: () => Promise<void>
 	persistSchedule: (schedule: WorkSchedule) => Promise<void>
 	persistDayOverride: (override: DayOverride) => Promise<void>
 	clearDayOverride: (date: string) => Promise<void>
+	persistSalarySettings: (settings: SalarySettings) => Promise<void>
+	resetSalarySettings: () => Promise<void>
 	resetSchedule: () => Promise<void>
 }
 
 const AppBootstrapContext = createContext<AppBootstrapValue>({
 	schedule: null,
 	overrides: emptyOverrideMap(),
+	salarySettings: null,
 	ready: false,
 	refreshSchedule: async () => undefined,
 	persistSchedule: async () => undefined,
 	persistDayOverride: async () => undefined,
 	clearDayOverride: async () => undefined,
+	persistSalarySettings: async () => undefined,
+	resetSalarySettings: async () => undefined,
 	resetSchedule: async () => undefined,
 })
 
@@ -55,13 +70,17 @@ export function AppBootstrapProvider ({
 }: AppBootstrapProviderProps) {
 	const [schedule, setSchedule] = useState<WorkSchedule | null>(null)
 	const [overrides, setOverrides] = useState<DayOverrideMap>(emptyOverrideMap)
+	const [salarySettings, setSalarySettings] =
+		useState<SalarySettings | null>(null)
 	const [ready, setReady] = useState(false)
 
 	const refreshSchedule = useCallback(async () => {
 		const nextSchedule = await getWorkSchedule()
 		const nextOverrides = await getDayOverrides()
+		const nextSalary = await getSalarySettings()
 		setSchedule(nextSchedule)
 		setOverrides(nextOverrides)
+		setSalarySettings(nextSalary)
 	}, [])
 
 	const persistSchedule = useCallback(async (next: WorkSchedule) => {
@@ -81,6 +100,19 @@ export function AppBootstrapProvider ({
 		setOverrides(next)
 	}, [overrides])
 
+	const persistSalarySettings = useCallback(
+		async (next: SalarySettings) => {
+			await saveSalarySettings(next)
+			setSalarySettings(next)
+		},
+		[],
+	)
+
+	const resetSalarySettings = useCallback(async () => {
+		await clearSalarySettings()
+		setSalarySettings(null)
+	}, [])
+
 	const resetSchedule = useCallback(async () => {
 		await clearWorkSchedule()
 		setSchedule(null)
@@ -93,14 +125,17 @@ export function AppBootstrapProvider ({
 			try {
 				const nextSchedule = await getWorkSchedule()
 				const nextOverrides = await getDayOverrides()
+				const nextSalary = await getSalarySettings()
 				if (!cancelled) {
 					setSchedule(nextSchedule)
 					setOverrides(nextOverrides)
+					setSalarySettings(nextSalary)
 				}
 			} catch {
 				if (!cancelled) {
 					setSchedule(null)
 					setOverrides(emptyOverrideMap())
+					setSalarySettings(null)
 				}
 			} finally {
 				if (!cancelled) {
@@ -117,21 +152,27 @@ export function AppBootstrapProvider ({
 		() => ({
 			schedule,
 			overrides,
+			salarySettings,
 			ready,
 			refreshSchedule,
 			persistSchedule,
 			persistDayOverride,
 			clearDayOverride,
+			persistSalarySettings,
+			resetSalarySettings,
 			resetSchedule,
 		}),
 		[
 			schedule,
 			overrides,
+			salarySettings,
 			ready,
 			refreshSchedule,
 			persistSchedule,
 			persistDayOverride,
 			clearDayOverride,
+			persistSalarySettings,
+			resetSalarySettings,
 			resetSchedule,
 		],
 	)

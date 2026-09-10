@@ -1,5 +1,5 @@
 /**
- * More tab home — Phase 1 links only.
+ * More tab home — schedule, salary, learning, about.
  */
 
 import { StyleSheet, Text, View } from 'react-native'
@@ -25,6 +25,10 @@ export function MoreScreen ({ navigation }: Props) {
 					<SecondaryLink
 						label="Мой график"
 						onPress={() => navigation.navigate('MySchedule')}
+					/>
+					<SecondaryLink
+						label="Оплата и зарплата"
+						onPress={() => navigation.navigate('Salary')}
 					/>
 					<SecondaryLink
 						label="Обучение"

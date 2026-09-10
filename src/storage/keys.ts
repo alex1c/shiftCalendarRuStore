@@ -8,4 +8,5 @@ export const STORAGE_KEYS = {
 	meta: '@shiftcalendar/meta',
 	schedule: '@shiftcalendar/schedule',
 	overrides: '@shiftcalendar/overrides',
+	salary: '@shiftcalendar/salary',
 } as const
