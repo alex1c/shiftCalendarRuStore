@@ -60,6 +60,10 @@ export function DayDetails ({ day, onEdit, onRestore }: DayDetailsProps) {
 			<Text style={[styles.date, { color: colors.textPrimary }]}>
 				{formatWeekdayDayMonth(day.date)}
 			</Text>
+			<AppButton
+				label={isOverridden ? 'Изменить' : 'Изменить день'}
+				onPress={onEdit}
+			/>
 			<View style={styles.row}>
 				<View
 					style={[
@@ -145,10 +149,6 @@ export function DayDetails ({ day, onEdit, onRestore }: DayDetailsProps) {
 					) : null}
 				</View>
 			</View>
-			<AppButton
-				label={isOverridden ? 'Изменить' : 'Изменить день'}
-				onPress={onEdit}
-			/>
 			{isOverridden && onRestore ? (
 				<AppButton
 					label="Вернуть по графику"
