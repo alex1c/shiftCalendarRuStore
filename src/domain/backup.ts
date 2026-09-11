@@ -311,7 +311,8 @@ export function validateBackup (
  * to the user-facing corrupt / not_backup messages.
  */
 export function parseBackupJson (raw: string): BackupResult<BackupPayload> {
-	const trimmed = raw.trim()
+	// Some Android document providers preserve a UTF-8 BOM on import.
+	const trimmed = raw.replace(/^\uFEFF/, '').trim()
 	if (trimmed.length === 0) {
 		return fail('corrupt')
 	}

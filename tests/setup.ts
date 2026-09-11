@@ -42,6 +42,12 @@ jest.mock('expo-file-system', () => {
 	}
 })
 
+jest.mock('expo-file-system/legacy', () => ({
+	EncodingType: { UTF8: 'utf8', Base64: 'base64' },
+	readAsStringAsync: jest.fn(async () => ''),
+	writeAsStringAsync: jest.fn(async () => undefined),
+}))
+
 jest.mock('expo-sharing', () => ({
 	isAvailableAsync: jest.fn(async () => false),
 	shareAsync: jest.fn(async () => undefined),

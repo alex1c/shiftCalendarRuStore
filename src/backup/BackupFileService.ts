@@ -5,6 +5,11 @@
 
 import * as DocumentPicker from 'expo-document-picker'
 import { File, Paths } from 'expo-file-system'
+import {
+	EncodingType,
+	readAsStringAsync,
+	writeAsStringAsync,
+} from 'expo-file-system/legacy'
 import * as Sharing from 'expo-sharing'
 
 import {
@@ -31,7 +36,11 @@ export async function writeBackupFile (
 	const fileName = buildBackupFileName(now)
 	const file = new File(Paths.cache, fileName)
 	file.create({ overwrite: true })
-	file.write(serializeBackupPayload(payload))
+	// Android's new File.write path emits UTF-16 on the target SDK. The legacy
+	// writer delegates to the ContentResolver-compatible UTF-8 implementation.
+	await writeAsStringAsync(file.uri, serializeBackupPayload(payload), {
+		encoding: EncodingType.UTF8,
+	})
 	return { uri: file.uri, fileName }
 }
 
@@ -94,9 +103,27 @@ export async function pickAndParseBackup (): Promise<BackupResult<BackupPayload>
 		}
 	}
 	try {
-		const file = new File(asset.uri)
-		const raw = await file.text()
-		return parseBackupJson(raw)
+		// Providers differ in whether they expose the picked content as a
+		// readable filesystem URI or only through ContentResolver. Try both
+		// SDK 57-compatible paths before reporting a corrupt backup.
+		const candidates: string[] = []
+		try {
+			candidates.push(await readAsStringAsync(asset.uri))
+		} catch {
+			// Fall through to the new File API.
+		}
+		try {
+			candidates.push(await new File(asset.uri).text())
+		} catch {
+			// The legacy result, if any, is still validated below.
+		}
+		for (const raw of candidates) {
+			const parsed = parseBackupJson(raw)
+			if (parsed.ok) {
+				return parsed
+			}
+		}
+		return { ok: false, code: 'corrupt', message: BACKUP_ERROR_MESSAGES.corrupt }
 	} catch {
 		return {
 			ok: false,
