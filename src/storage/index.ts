@@ -19,6 +19,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import {
 	DEFAULT_PRIMARY_PROFILE_NAME,
+	NOTIFICATION_SETTINGS_SCHEMA_VERSION,
 	PROFILES_DOCUMENT_VERSION,
 	SALARY_SCHEMA_VERSION,
 	buildScheduleProfile,
@@ -35,8 +36,8 @@ import {
 	resolveActiveProfile,
 	updateProfileOverrides,
 	updateProfileSchedule,
-	NOTIFICATION_SETTINGS_SCHEMA_VERSION,
 	type NotificationSettings,
+	type RestoredAppState,
 	type SalarySettings,
 	type ScheduleProfile,
 } from '@/src/domain'
@@ -437,6 +438,63 @@ export async function saveNotificationSettings (
 export async function clearNotificationSettings (): Promise<void> {
 	await ensureStorageMigrated()
 	await AsyncStorage.removeItem(STORAGE_KEYS.notifications)
+}
+
+/**
+ * Atomic full-app replace used by backup restore.
+ * Validates/prepares state elsewhere; this only serializes and multiSets
+ * so we never clear first and leave a half-empty store.
+ */
+export async function replaceAppDataFromBackup (
+	state: RestoredAppState,
+): Promise<void> {
+	const profilesPayload: StoredProfiles = {
+		schemaVersion: PROFILES_DOCUMENT_VERSION,
+		profiles: state.profiles,
+	}
+	const activePayload: StoredActiveProfile = {
+		id: state.activeProfileId,
+	}
+	const pairs: [string, string][] = [
+		[
+			STORAGE_KEYS.meta,
+			JSON.stringify({ schemaVersion: STORAGE_SCHEMA_VERSION }),
+		],
+		[STORAGE_KEYS.profiles, JSON.stringify(profilesPayload)],
+		[STORAGE_KEYS.activeProfile, JSON.stringify(activePayload)],
+	]
+	if (state.salarySettings) {
+		const salaryPayload: StoredSalary = {
+			schemaVersion: SALARY_SCHEMA_VERSION,
+			settings: state.salarySettings,
+		}
+		pairs.push([STORAGE_KEYS.salary, JSON.stringify(salaryPayload)])
+	}
+	if (state.notificationSettings) {
+		const notificationsPayload: StoredNotifications = {
+			schemaVersion: NOTIFICATION_SETTINGS_SCHEMA_VERSION,
+			settings: normalizeNotificationSettings(state.notificationSettings),
+		}
+		pairs.push([
+			STORAGE_KEYS.notifications,
+			JSON.stringify(notificationsPayload),
+		])
+	}
+
+	await AsyncStorage.multiSet(pairs)
+
+	const removals: string[] = [
+		STORAGE_KEYS.schedule,
+		STORAGE_KEYS.overrides,
+	]
+	if (!state.salarySettings) {
+		removals.push(STORAGE_KEYS.salary)
+	}
+	if (!state.notificationSettings) {
+		removals.push(STORAGE_KEYS.notifications)
+	}
+	await AsyncStorage.multiRemove(removals)
+	migrated = true
 }
 
 /** Load date-keyed day overrides for the active profile. */

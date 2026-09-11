@@ -5,6 +5,7 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
 
 import { AboutScreen } from '@/src/screens/AboutScreen'
+import { BackupScreen } from '@/src/screens/BackupScreen'
 import { LearningScreen } from '@/src/screens/LearningScreen'
 import { MoreScreen } from '@/src/screens/MoreScreen'
 import { MyScheduleScreen } from '@/src/screens/MyScheduleScreen'
@@ -59,6 +60,11 @@ export function MoreNavigator () {
 				name="Notifications"
 				component={NotificationsScreen}
 				options={{ title: 'Уведомления' }}
+			/>
+			<Stack.Screen
+				name="Backup"
+				component={BackupScreen}
+				options={{ title: 'Резервная копия' }}
 			/>
 			<Stack.Screen
 				name="Learning"

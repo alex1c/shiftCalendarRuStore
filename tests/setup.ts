@@ -19,3 +19,34 @@ jest.mock('expo-notifications', () => ({
 	AndroidNotificationVisibility: { PRIVATE: 0, PUBLIC: 1, SECRET: -1 },
 	SchedulableTriggerInputTypes: { DATE: 'date' },
 }))
+
+jest.mock('expo-file-system', () => {
+	class MockFile {
+		uri: string
+		constructor (...parts: unknown[]) {
+			this.uri = parts.map(String).join('/')
+		}
+		create () {
+			return undefined
+		}
+		write () {
+			return undefined
+		}
+		async text () {
+			return ''
+		}
+	}
+	return {
+		File: MockFile,
+		Paths: { cache: 'cache', document: 'document' },
+	}
+})
+
+jest.mock('expo-sharing', () => ({
+	isAvailableAsync: jest.fn(async () => false),
+	shareAsync: jest.fn(async () => undefined),
+}))
+
+jest.mock('expo-document-picker', () => ({
+	getDocumentAsync: jest.fn(async () => ({ canceled: true, assets: null })),
+}))

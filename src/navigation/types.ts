@@ -23,6 +23,7 @@ export type MoreStackParamList = {
 	Salary: undefined
 	SalarySettings: undefined
 	Notifications: undefined
+	Backup: undefined
 	Learning: undefined
 	About: undefined
 }

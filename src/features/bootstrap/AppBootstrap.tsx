@@ -76,6 +76,8 @@ type AppBootstrapValue = {
 	persistNotificationSettings: (settings: NotificationSettings) => Promise<void>
 	resetSalarySettings: () => Promise<void>
 	resetSchedule: () => Promise<void>
+	/** Reload all persisted state after a successful backup restore. */
+	reloadAfterRestore: () => Promise<void>
 }
 
 const AppBootstrapContext = createContext<AppBootstrapValue>({
@@ -100,6 +102,7 @@ const AppBootstrapContext = createContext<AppBootstrapValue>({
 	persistNotificationSettings: async () => undefined,
 	resetSalarySettings: async () => undefined,
 	resetSchedule: async () => undefined,
+	reloadAfterRestore: async () => undefined,
 })
 
 type AppBootstrapProviderProps = {
@@ -312,6 +315,18 @@ export function AppBootstrapProvider ({
 		queueReschedule([], notificationSettings)
 	}, [notificationSettings, queueReschedule])
 
+	const reloadAfterRestore = useCallback(async () => {
+		const nextProfiles = await getProfiles()
+		const nextActiveId = await getActiveProfileId()
+		const nextSalary = await getSalarySettings()
+		const nextNotifications = await getNotificationSettings()
+		setProfiles(nextProfiles)
+		setActiveId(nextActiveId)
+		setSalarySettings(nextSalary)
+		setNotificationSettings(nextNotifications)
+		queueReschedule(nextProfiles, nextNotifications)
+	}, [queueReschedule])
+
 	useEffect(() => {
 		configureNotificationHandling()
 	}, [])
@@ -380,6 +395,7 @@ export function AppBootstrapProvider ({
 			persistNotificationSettings,
 			resetSalarySettings,
 			resetSchedule,
+			reloadAfterRestore,
 		}),
 		[
 			profiles,
@@ -403,6 +419,7 @@ export function AppBootstrapProvider ({
 			persistNotificationSettings,
 			resetSalarySettings,
 			resetSchedule,
+			reloadAfterRestore,
 		],
 	)
 
