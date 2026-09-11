@@ -38,6 +38,7 @@ import {
 	getActiveProfileId,
 	getProfiles,
 	getSalarySettings,
+	saveDayOverrides,
 	saveActiveProfileId,
 	saveProfiles,
 	saveSalarySettings,
@@ -166,6 +167,7 @@ export function AppBootstrapProvider ({
 		const nextOverrides = upsertOverride(activeProfile.overrides, override)
 		const updated = updateProfileOverrides(activeProfile, nextOverrides)
 		await persistProfiles(replaceProfile(profiles, updated))
+		await saveDayOverrides(nextOverrides)
 	}, [activeProfile, persistProfiles, profiles])
 
 	const clearDayOverride = useCallback(async (date: string) => {
@@ -178,6 +180,7 @@ export function AppBootstrapProvider ({
 		)
 		const updated = updateProfileOverrides(activeProfile, nextOverrides)
 		await persistProfiles(replaceProfile(profiles, updated))
+		await saveDayOverrides(nextOverrides)
 	}, [activeProfile, persistProfiles, profiles])
 
 	const addProfile = useCallback(async (
