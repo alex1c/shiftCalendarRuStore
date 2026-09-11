@@ -1,5 +1,6 @@
 /**
  * Onboarding stack: preset or custom builder → start date → confirm.
+ * Also reused under AddProfile, starting at the profile-name step.
  */
 
 import { createNativeStackNavigator } from '@react-navigation/native-stack'
@@ -10,18 +11,26 @@ import { CustomBuilderScreen } from '@/src/screens/onboarding/CustomBuilderScree
 import { CustomShiftEditorScreen } from '@/src/screens/onboarding/CustomShiftEditorScreen'
 import { CycleItemScreen } from '@/src/screens/onboarding/CycleItemScreen'
 import { PresetSelectScreen } from '@/src/screens/onboarding/PresetSelectScreen'
+import { ProfileNameScreen } from '@/src/screens/onboarding/ProfileNameScreen'
 import { StartDateScreen } from '@/src/screens/onboarding/StartDateScreen'
 import { useTheme } from '@/src/theme'
 import type { OnboardingStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<OnboardingStackParamList>()
 
-export function OnboardingNavigator () {
+type OnboardingNavigatorProps = {
+	initialRouteName?: keyof OnboardingStackParamList
+}
+
+export function OnboardingNavigator ({
+	initialRouteName = 'PresetSelect',
+}: OnboardingNavigatorProps) {
 	const { colors } = useTheme()
 
 	return (
 		<OnboardingDraftProvider>
 			<Stack.Navigator
+				initialRouteName={initialRouteName}
 				screenOptions={{
 					headerStyle: { backgroundColor: colors.surface },
 					headerTintColor: colors.primary,
@@ -31,9 +40,17 @@ export function OnboardingNavigator () {
 				}}
 			>
 				<Stack.Screen
+					name="ProfileName"
+					component={ProfileNameScreen}
+					options={{ title: 'Новый график' }}
+				/>
+				<Stack.Screen
 					name="PresetSelect"
 					component={PresetSelectScreen}
-					options={{ headerShown: false }}
+					options={{
+						headerShown: initialRouteName !== 'PresetSelect',
+						title: 'График',
+					}}
 				/>
 				<Stack.Screen
 					name="CustomBuilder"
@@ -63,4 +80,8 @@ export function OnboardingNavigator () {
 			</Stack.Navigator>
 		</OnboardingDraftProvider>
 	)
+}
+
+export function AddProfileNavigator () {
+	return <OnboardingNavigator initialRouteName="ProfileName" />
 }

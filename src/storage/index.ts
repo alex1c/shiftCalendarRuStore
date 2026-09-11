@@ -1,5 +1,5 @@
 /**
- * Local persistence for the active work schedule and day overrides.
+ * Local persistence for schedule profiles, overrides and salary settings.
  *
  * AsyncStorage is used on purpose: one JSON document per key, a clean
  * repository API, and no native SQLite prepare/finalize races. The UI talks
@@ -7,16 +7,31 @@
  *
  * Reads and writes are sequential — never fan out concurrent native calls
  * against the same store with Promise.all.
+ *
+ * Schema v3 stores profiles at `@shiftcalendar/profiles`. Legacy v1/v2
+ * single-schedule documents are migrated into a primary profile named `Я`.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
 
 import {
+	DEFAULT_PRIMARY_PROFILE_NAME,
+	PROFILES_DOCUMENT_VERSION,
+	SALARY_SCHEMA_VERSION,
+	buildScheduleProfile,
 	emptyOverrideMap,
+	findPrimaryProfile,
 	isDayOverride,
 	isSalarySettings,
-	SALARY_SCHEMA_VERSION,
+	isScheduleProfile,
+	isWorkSchedule,
+	normalizeScheduleProfile,
+	replaceProfile,
+	resolveActiveProfile,
+	updateProfileOverrides,
+	updateProfileSchedule,
 	type SalarySettings,
+	type ScheduleProfile,
 } from '@/src/domain'
 import type { DayOverride, DayOverrideMap, WorkSchedule } from '@/src/types'
 import { STORAGE_KEYS, STORAGE_SCHEMA_VERSION } from './keys'
@@ -27,6 +42,20 @@ type MetaState = {
 
 type StoredOverrides = {
 	byDate: DayOverrideMap
+}
+
+type StoredProfiles = {
+	schemaVersion: number
+	profiles: ScheduleProfile[]
+}
+
+type StoredActiveProfile = {
+	id: string
+}
+
+type StoredSalary = {
+	schemaVersion: number
+	settings: SalarySettings
 }
 
 let migrated = false
@@ -50,50 +79,6 @@ async function readJson<T> (key: string): Promise<T | null> {
 
 async function writeJson (key: string, value: unknown): Promise<void> {
 	await AsyncStorage.setItem(key, JSON.stringify(value))
-}
-
-/**
- * Ensure schema meta exists. Safe to call repeatedly.
- * v1 → v2 only bumps the version; the schedule document is unchanged
- * and missing overrides are treated as an empty map.
- */
-export async function ensureStorageMigrated (): Promise<void> {
-	if (migrated) {
-		return
-	}
-	const meta = await readJson<MetaState>(STORAGE_KEYS.meta)
-	if (meta?.schemaVersion === STORAGE_SCHEMA_VERSION) {
-		migrated = true
-		return
-	}
-	if (
-		Number.isInteger(meta?.schemaVersion) &&
-		meta!.schemaVersion > STORAGE_SCHEMA_VERSION
-	) {
-		migrated = true
-		return
-	}
-	await writeJson(STORAGE_KEYS.meta, {
-		schemaVersion: STORAGE_SCHEMA_VERSION,
-	})
-	migrated = true
-}
-
-function isWorkSchedule (value: unknown): value is WorkSchedule {
-	if (!value || typeof value !== 'object') {
-		return false
-	}
-	const record = value as Partial<WorkSchedule>
-	return (
-		typeof record.id === 'string' &&
-		typeof record.name === 'string' &&
-		typeof record.presetId === 'string' &&
-		typeof record.startDate === 'string' &&
-		Array.isArray(record.cycle) &&
-		record.cycle.length > 0 &&
-		Array.isArray(record.shiftTypes) &&
-		record.shiftTypes.length > 0
-	)
 }
 
 function normalizeOverride (value: DayOverride): DayOverride {
@@ -133,41 +118,30 @@ function parseOverrideMap (value: unknown): DayOverrideMap {
 	return next
 }
 
-/**
- * Load the active schedule, or null when the user still needs onboarding.
- */
-export async function getWorkSchedule (): Promise<WorkSchedule | null> {
-	await ensureStorageMigrated()
-	const stored = await readJson<unknown>(STORAGE_KEYS.schedule)
-	if (!isWorkSchedule(stored)) {
-		return null
+function parseProfiles (value: unknown): ScheduleProfile[] {
+	if (!value || typeof value !== 'object') {
+		return []
 	}
-	return stored
-}
-
-/**
- * Persist the active schedule (overwrites the previous one).
- */
-export async function saveWorkSchedule (
-	schedule: WorkSchedule,
-): Promise<void> {
-	await ensureStorageMigrated()
-	await writeJson(STORAGE_KEYS.schedule, schedule)
-}
-
-/**
- * Remove the saved schedule and its day overrides so onboarding can run.
- * Salary settings are kept: the rate usually survives a schedule reset.
- */
-export async function clearWorkSchedule (): Promise<void> {
-	await ensureStorageMigrated()
-	await AsyncStorage.removeItem(STORAGE_KEYS.schedule)
-	await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
-}
-
-type StoredSalary = {
-	schemaVersion: number
-	settings: SalarySettings
+	const record = value as Partial<StoredProfiles>
+	if (!Array.isArray(record.profiles)) {
+		return []
+	}
+	const next: ScheduleProfile[] = []
+	for (const item of record.profiles) {
+		if (isScheduleProfile(item)) {
+			next.push(normalizeScheduleProfile({
+				...item,
+				overrides: parseOverrideMap(item.overrides),
+			}))
+		}
+	}
+	if (next.length === 0) {
+		return []
+	}
+	if (!next.some((item) => item.isPrimary)) {
+		next[0] = { ...next[0]!, isPrimary: true }
+	}
+	return next
 }
 
 function parseSalarySettings (value: unknown): SalarySettings | null {
@@ -191,6 +165,196 @@ function parseSalarySettings (value: unknown): SalarySettings | null {
 		return candidate
 	}
 	return candidate
+}
+
+async function writeProfiles (profiles: ScheduleProfile[]): Promise<void> {
+	const payload: StoredProfiles = {
+		schemaVersion: PROFILES_DOCUMENT_VERSION,
+		profiles,
+	}
+	await writeJson(STORAGE_KEYS.profiles, payload)
+}
+
+async function writeActiveProfileId (id: string | null): Promise<void> {
+	if (!id) {
+		await AsyncStorage.removeItem(STORAGE_KEYS.activeProfile)
+		return
+	}
+	const payload: StoredActiveProfile = { id }
+	await writeJson(STORAGE_KEYS.activeProfile, payload)
+}
+
+async function readActiveProfileId (): Promise<string | null> {
+	const stored = await readJson<unknown>(STORAGE_KEYS.activeProfile)
+	if (!stored || typeof stored !== 'object') {
+		return null
+	}
+	const record = stored as Partial<StoredActiveProfile>
+	return typeof record.id === 'string' ? record.id : null
+}
+
+async function bindSalaryToPrimary (
+	primaryId: string,
+): Promise<void> {
+	const stored = await readJson<unknown>(STORAGE_KEYS.salary)
+	const settings = parseSalarySettings(stored)
+	if (!settings) {
+		return
+	}
+	if (settings.profileId === primaryId) {
+		return
+	}
+	const payload: StoredSalary = {
+		schemaVersion: SALARY_SCHEMA_VERSION,
+		settings: { ...settings, profileId: primaryId },
+	}
+	await writeJson(STORAGE_KEYS.salary, payload)
+}
+
+/**
+ * Copy a v1/v2 single schedule (+ overrides) into a primary profile `Я`.
+ * No-op when a valid profiles document already exists.
+ */
+async function migrateLegacyToProfiles (): Promise<void> {
+	const existing = parseProfiles(
+		await readJson<unknown>(STORAGE_KEYS.profiles),
+	)
+	if (existing.length > 0) {
+		const primary = findPrimaryProfile(existing)
+		if (primary) {
+			await bindSalaryToPrimary(primary.id)
+		}
+		return
+	}
+	const legacySchedule = await readJson<unknown>(STORAGE_KEYS.schedule)
+	if (!isWorkSchedule(legacySchedule)) {
+		return
+	}
+	const legacyOverrides = parseOverrideMap(
+		await readJson<unknown>(STORAGE_KEYS.overrides),
+	)
+	const profile = buildScheduleProfile({
+		name: DEFAULT_PRIMARY_PROFILE_NAME,
+		schedule: legacySchedule,
+		overrides: legacyOverrides,
+		accent: 'blue',
+		isPrimary: true,
+	})
+	await writeProfiles([profile])
+	await writeActiveProfileId(profile.id)
+	await bindSalaryToPrimary(profile.id)
+	await AsyncStorage.removeItem(STORAGE_KEYS.schedule)
+	await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
+}
+
+/**
+ * Ensure schema meta exists and legacy single-schedule data is migrated.
+ */
+export async function ensureStorageMigrated (): Promise<void> {
+	if (migrated) {
+		return
+	}
+	const meta = await readJson<MetaState>(STORAGE_KEYS.meta)
+	if (
+		Number.isInteger(meta?.schemaVersion) &&
+		meta!.schemaVersion > STORAGE_SCHEMA_VERSION
+	) {
+		migrated = true
+		return
+	}
+	await migrateLegacyToProfiles()
+	await writeJson(STORAGE_KEYS.meta, {
+		schemaVersion: STORAGE_SCHEMA_VERSION,
+	})
+	migrated = true
+}
+
+export async function getProfiles (): Promise<ScheduleProfile[]> {
+	await ensureStorageMigrated()
+	return parseProfiles(await readJson<unknown>(STORAGE_KEYS.profiles))
+}
+
+export async function saveProfiles (
+	profiles: ScheduleProfile[],
+): Promise<void> {
+	await ensureStorageMigrated()
+	await writeProfiles(profiles)
+}
+
+export async function getActiveProfileId (): Promise<string | null> {
+	await ensureStorageMigrated()
+	const profiles = await getProfiles()
+	const storedId = await readActiveProfileId()
+	const active = resolveActiveProfile(profiles, storedId)
+	return active?.id ?? null
+}
+
+export async function saveActiveProfileId (
+	id: string,
+): Promise<void> {
+	await ensureStorageMigrated()
+	await writeActiveProfileId(id)
+}
+
+async function activeProfile (): Promise<ScheduleProfile | null> {
+	const profiles = await getProfiles()
+	const storedId = await readActiveProfileId()
+	return resolveActiveProfile(profiles, storedId)
+}
+
+/**
+ * Load the active schedule, or null when the user still needs onboarding.
+ */
+export async function getWorkSchedule (): Promise<WorkSchedule | null> {
+	const profile = await activeProfile()
+	return profile?.schedule ?? null
+}
+
+/**
+ * Persist the active schedule. Creates a primary `Я` profile on first save.
+ */
+export async function saveWorkSchedule (
+	schedule: WorkSchedule,
+): Promise<void> {
+	await ensureStorageMigrated()
+	const profiles = await getProfiles()
+	if (profiles.length === 0) {
+		const leftover = parseOverrideMap(
+			await readJson<unknown>(STORAGE_KEYS.overrides),
+		)
+		const profile = buildScheduleProfile({
+			name: DEFAULT_PRIMARY_PROFILE_NAME,
+			schedule,
+			overrides: leftover,
+			accent: 'blue',
+			isPrimary: true,
+		})
+		await writeProfiles([profile])
+		await writeActiveProfileId(profile.id)
+		await bindSalaryToPrimary(profile.id)
+		await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
+		return
+	}
+	const storedId = await readActiveProfileId()
+	const current = resolveActiveProfile(profiles, storedId)
+	if (!current) {
+		return
+	}
+	await writeProfiles(
+		replaceProfile(profiles, updateProfileSchedule(current, schedule)),
+	)
+}
+
+/**
+ * Remove every profile so onboarding can run.
+ * Salary settings are kept: the rate usually survives a schedule reset.
+ */
+export async function clearWorkSchedule (): Promise<void> {
+	await ensureStorageMigrated()
+	await AsyncStorage.removeItem(STORAGE_KEYS.schedule)
+	await AsyncStorage.removeItem(STORAGE_KEYS.overrides)
+	await AsyncStorage.removeItem(STORAGE_KEYS.profiles)
+	await AsyncStorage.removeItem(STORAGE_KEYS.activeProfile)
 }
 
 /** Load salary settings. Missing or corrupt JSON is treated as unset. */
@@ -218,28 +382,46 @@ export async function clearSalarySettings (): Promise<void> {
 	await AsyncStorage.removeItem(STORAGE_KEYS.salary)
 }
 
-/** Load date-keyed day overrides. Missing or corrupt data is an empty map. */
+/** Load date-keyed day overrides for the active profile. */
 export async function getDayOverrides (): Promise<DayOverrideMap> {
+	const profile = await activeProfile()
+	if (profile) {
+		return profile.overrides
+	}
 	await ensureStorageMigrated()
 	const stored = await readJson<unknown>(STORAGE_KEYS.overrides)
 	return parseOverrideMap(stored)
 }
 
-/** Persist the full override map (one document, keyed by date). */
+/** Persist the full override map for the active profile. */
 export async function saveDayOverrides (
 	overrides: DayOverrideMap,
 ): Promise<void> {
 	await ensureStorageMigrated()
-	await writeJson(STORAGE_KEYS.overrides, { byDate: overrides })
+	const profiles = await getProfiles()
+	if (profiles.length === 0) {
+		await writeJson(STORAGE_KEYS.overrides, { byDate: overrides })
+		return
+	}
+	const storedId = await readActiveProfileId()
+	const current = resolveActiveProfile(profiles, storedId)
+	if (!current) {
+		return
+	}
+	await writeProfiles(
+		replaceProfile(profiles, updateProfileOverrides(current, overrides)),
+	)
 }
 
-/** Test helper — wipe calendar and salary keys. */
+/** Test helper — wipe calendar, profile and salary keys. */
 export async function clearAllStorageForTests (): Promise<void> {
 	await AsyncStorage.multiRemove([
 		STORAGE_KEYS.meta,
 		STORAGE_KEYS.schedule,
 		STORAGE_KEYS.overrides,
 		STORAGE_KEYS.salary,
+		STORAGE_KEYS.profiles,
+		STORAGE_KEYS.activeProfile,
 	])
 	migrated = false
 }

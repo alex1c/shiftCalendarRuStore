@@ -10,13 +10,18 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { DayDetails } from '@/src/components/DayDetails'
 import { MonthCalendar } from '@/src/components/MonthCalendar'
+import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
+import { SurfaceCard } from '@/src/components/ui'
 import {
 	addMonths,
 	buildMonthGrid,
+	commonDaysOffInMonth,
 	computeMonthStats,
 	findNextWorkShift,
 	formatCalendarDate,
+	formatDayListInMonth,
+	formatInMonth,
 	formatMonthStats,
 	formatMonthYear,
 	formatNextWorkShift,
@@ -40,7 +45,8 @@ type Props = NativeStackScreenProps<CalendarStackParamList, 'CalendarHome'>
 
 export function CalendarScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
-	const { schedule, overrides, clearDayOverride } = useAppBootstrap()
+	const { schedule, overrides, clearDayOverride, profiles, activeProfile } =
+		useAppBootstrap()
 	const today = todayCalendarDate()
 	const todayParts = parseCalendarDate(today)
 
@@ -49,6 +55,8 @@ export function CalendarScreen ({ navigation, route }: Props) {
 		month: todayParts.month,
 	})
 	const [selectedDate, setSelectedDate] = useState(today)
+	const [combined, setCombined] = useState(false)
+	const [peerId, setPeerId] = useState<string | null>(null)
 
 	const handleSelectDate = useCallback((date: string) => {
 		const parts = parseCalendarDate(date)
@@ -104,6 +112,62 @@ export function CalendarScreen ({ navigation, route }: Props) {
 		),
 		[daysByDate],
 	)
+
+	const peers = useMemo(
+		() => profiles.filter((item) => item.id !== activeProfile?.id),
+		[profiles, activeProfile?.id],
+	)
+	const peerProfile = useMemo(() => {
+		if (peers.length === 0) {
+			return null
+		}
+		return peers.find((item) => item.id === peerId) ?? peers[0] ?? null
+	}, [peers, peerId])
+	const showCombined = combined && peerProfile != null && activeProfile != null
+
+	const combinedByDate = useMemo(() => {
+		if (!showCombined || !activeProfile || !peerProfile) {
+			return undefined
+		}
+		const next: Record<string, { left: string; right: string }> = {}
+		for (const cell of cells) {
+			const left = getEffectiveDay(
+				activeProfile.schedule,
+				cell.date,
+				activeProfile.overrides,
+			)
+			const right = getEffectiveDay(
+				peerProfile.schedule,
+				cell.date,
+				peerProfile.overrides,
+			)
+			next[cell.date] = {
+				left: left.shift.shortName,
+				right: right.shift.shortName,
+			}
+		}
+		return next
+	}, [showCombined, activeProfile, peerProfile, cells])
+
+	const commonOffDates = useMemo(() => {
+		if (!showCombined || !activeProfile || !peerProfile) {
+			return []
+		}
+		return commonDaysOffInMonth(
+			activeProfile,
+			peerProfile,
+			visible.year,
+			visible.month,
+		)
+	}, [showCombined, activeProfile, peerProfile, visible.year, visible.month])
+
+	const selectedPeerDay = showCombined && peerProfile
+		? getEffectiveDay(
+			peerProfile.schedule,
+			selectedDate,
+			peerProfile.overrides,
+		)
+		: null
 
 	const selectedDay = schedule
 		? getEffectiveDay(schedule, selectedDate, overrides)
@@ -165,6 +229,9 @@ export function CalendarScreen ({ navigation, route }: Props) {
 
 	return (
 		<Screen includeBottomSafeArea={false}>
+			<View style={styles.switcherRow}>
+				<ProfileSwitcher />
+			</View>
 			<View style={styles.headerRow}>
 				<HeaderIconButton
 					icon="chevron-back"
@@ -207,6 +274,121 @@ export function CalendarScreen ({ navigation, route }: Props) {
 				</Text>
 			</Pressable>
 
+			{peers.length > 0 ? (
+				<View style={styles.modeRow}>
+					<Pressable
+						accessibilityRole="button"
+						accessibilityState={{ selected: !combined }}
+						onPress={() => setCombined(false)}
+						style={({ pressed }) => [
+							styles.modeChip,
+							{
+								backgroundColor: !combined
+									? colors.primaryMuted
+									: colors.surface,
+								borderColor: !combined
+									? colors.primary
+									: colors.border,
+								opacity: pressed ? 0.85 : 1,
+							},
+						]}
+					>
+						<Text
+							style={[
+								styles.modeLabel,
+								{
+									color: !combined
+										? colors.primary
+										: colors.textPrimary,
+								},
+							]}
+						>
+							{activeProfile?.name ?? 'Я'}
+						</Text>
+					</Pressable>
+					<Pressable
+						accessibilityRole="button"
+						accessibilityState={{ selected: combined }}
+						onPress={() => setCombined(true)}
+						style={({ pressed }) => [
+							styles.modeChip,
+							{
+								backgroundColor: combined
+									? colors.primaryMuted
+									: colors.surface,
+								borderColor: combined
+									? colors.primary
+									: colors.border,
+								opacity: pressed ? 0.85 : 1,
+							},
+						]}
+					>
+						<Text
+							style={[
+								styles.modeLabel,
+								{
+									color: combined
+										? colors.primary
+										: colors.textPrimary,
+								},
+							]}
+						>
+							Совместный
+						</Text>
+					</Pressable>
+				</View>
+			) : null}
+
+			{showCombined && peerProfile && activeProfile ? (
+				<View style={styles.legend}>
+					<Text style={[styles.legendItem, { color: colors.textSecondary }]}>
+						● {activeProfile.name}
+					</Text>
+					<Text style={[styles.legendItem, { color: colors.textSecondary }]}>
+						● {peerProfile.name}
+					</Text>
+				</View>
+			) : null}
+
+			{showCombined && peers.length > 1 ? (
+				<View style={styles.modeRow}>
+					{peers.map((item) => {
+						const selected = item.id === peerProfile?.id
+						return (
+							<Pressable
+								key={item.id}
+								accessibilityRole="button"
+								onPress={() => setPeerId(item.id)}
+								style={[
+									styles.modeChip,
+									{
+										backgroundColor: selected
+											? colors.primaryMuted
+											: colors.surface,
+										borderColor: selected
+											? colors.primary
+											: colors.border,
+									},
+								]}
+							>
+								<Text
+									style={[
+										styles.modeLabel,
+										{
+											color: selected
+												? colors.primary
+												: colors.textPrimary,
+										},
+									]}
+								>
+									{item.name}
+								</Text>
+							</Pressable>
+						)
+					})}
+				</View>
+			) : null}
+
 			{isCurrentMonth ? (
 				<View
 					style={[
@@ -243,6 +425,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 				cells={cells}
 				shiftsByDate={shiftsByDate}
 				overriddenDates={overriddenDates}
+				combinedByDate={combinedByDate}
 				todayDate={today}
 				selectedDate={selectedDate}
 				onSelectDate={handleSelectDate}
@@ -250,7 +433,29 @@ export function CalendarScreen ({ navigation, route }: Props) {
 			/>
 
 			<View style={styles.below}>
-				{nextShiftLabel ? (
+				{showCombined ? (
+					<SurfaceCard style={styles.commonCard}>
+						<Text
+							style={[
+								styles.commonTitle,
+								{ color: colors.textPrimary },
+							]}
+						>
+							{`Общие выходные ${formatInMonth(visible.month)}: ${commonOffDates.length}`}
+						</Text>
+						{commonOffDates.length > 0 ? (
+							<Text
+								style={[
+									styles.commonList,
+									{ color: colors.textSecondary },
+								]}
+							>
+								{formatDayListInMonth(commonOffDates)}
+							</Text>
+						) : null}
+					</SurfaceCard>
+				) : null}
+				{nextShiftLabel && !showCombined ? (
 					<Text
 						style={[styles.insight, { color: colors.textSecondary }]}
 					>
@@ -275,6 +480,13 @@ export function CalendarScreen ({ navigation, route }: Props) {
 							: undefined
 					}
 				/>
+				{selectedPeerDay && peerProfile ? (
+					<Text
+						style={[styles.insight, { color: colors.textSecondary }]}
+					>
+						{`${peerProfile.name}: ${selectedPeerDay.shift.shortName} · ${selectedPeerDay.shift.name}`}
+					</Text>
+				) : null}
 			</View>
 		</Screen>
 	)
@@ -313,6 +525,9 @@ function HeaderIconButton ({
 }
 
 const styles = StyleSheet.create({
+	switcherRow: {
+		marginBottom: spacing.sm,
+	},
 	headerRow: {
 		flexDirection: 'row',
 		alignItems: 'center',
@@ -343,6 +558,32 @@ const styles = StyleSheet.create({
 	todayButtonLabel: {
 		...typography.bodyStrong,
 	},
+	modeRow: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: spacing.xs,
+		marginBottom: spacing.sm,
+	},
+	modeChip: {
+		minHeight: touchTarget.min,
+		paddingHorizontal: spacing.md,
+		borderRadius: radius.md,
+		borderWidth: 1.5,
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	modeLabel: {
+		...typography.bodyStrong,
+	},
+	legend: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: spacing.md,
+		marginBottom: spacing.sm,
+	},
+	legendItem: {
+		...typography.caption,
+	},
 	todaySummary: {
 		borderRadius: radius.md,
 		borderWidth: 1,
@@ -367,6 +608,16 @@ const styles = StyleSheet.create({
 		paddingBottom: spacing.lg,
 	},
 	insight: {
+		...typography.caption,
+	},
+	commonCard: {
+		gap: spacing.xxs,
+		marginBottom: spacing.xs,
+	},
+	commonTitle: {
+		...typography.bodyStrong,
+	},
+	commonList: {
 		...typography.caption,
 	},
 })

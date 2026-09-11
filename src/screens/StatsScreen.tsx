@@ -8,6 +8,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
 import { PeriodChips } from '@/src/components/PeriodChips'
+import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SecondaryLink, SurfaceCard } from '@/src/components/ui'
 import {
@@ -34,7 +35,8 @@ export function StatsScreen () {
 	const { colors } = useTheme()
 	const navigation =
 		useNavigation<BottomTabNavigationProp<MainTabParamList, 'Stats'>>()
-	const { schedule, overrides, salarySettings } = useAppBootstrap()
+	const { schedule, overrides, salarySettings, activeProfile, primaryProfile } =
+		useAppBootstrap()
 	const [period, setPeriod] = useState<StatsPeriodKind>('30')
 	const [now, setNow] = useState(() => new Date())
 
@@ -64,10 +66,15 @@ export function StatsScreen () {
 	}, [schedule, overrides, range])
 
 	const salaryTotals = useMemo(() => {
+		const salaryOwner =
+			activeProfile != null &&
+			primaryProfile != null &&
+			activeProfile.id === primaryProfile.id
 		if (
 			!schedule ||
 			!range ||
-			!isSalaryEnabled(salarySettings)
+			!isSalaryEnabled(salarySettings) ||
+			!salaryOwner
 		) {
 			return null
 		}
@@ -78,7 +85,7 @@ export function StatsScreen () {
 			range.startDate,
 			range.endDate,
 		)
-	}, [schedule, overrides, range, salarySettings])
+	}, [schedule, overrides, range, salarySettings, activeProfile, primaryProfile])
 
 	if (!schedule) {
 		return (
@@ -95,6 +102,10 @@ export function StatsScreen () {
 	}
 
 	const periodLabel = formatStatsPeriodLabel(period, range)
+	const isPrimaryActive =
+		activeProfile != null &&
+		primaryProfile != null &&
+		activeProfile.id === primaryProfile.id
 	const shiftsWord = ruPlural(stats.workShifts, 'смена', 'смены', 'смен')
 	const secondary = [
 		stats.vacationDays > 0
@@ -122,6 +133,9 @@ export function StatsScreen () {
 
 	return (
 		<Screen includeBottomSafeArea={false}>
+			<View style={styles.switcherRow}>
+				<ProfileSwitcher />
+			</View>
 			<Text
 				style={[styles.title, { color: colors.textPrimary }]}
 				accessibilityRole="header"
@@ -193,7 +207,7 @@ export function StatsScreen () {
 						</Text>
 					</SurfaceCard>
 				</Pressable>
-			) : (
+			) : isPrimaryActive ? (
 				<View style={styles.salarySetup}>
 					<SecondaryLink
 						label="Настроить расчёт зарплаты"
@@ -204,7 +218,13 @@ export function StatsScreen () {
 						}}
 					/>
 				</View>
-			)}
+			) : isSalaryEnabled(salarySettings) ? (
+				<Text
+					style={[styles.salaryNote, { color: colors.textTertiary }]}
+				>
+					Расчёт зарплаты доступен для основного графика
+				</Text>
+			) : null}
 
 			{secondary.length > 0 ? (
 				<SurfaceCard style={styles.breakdown}>
@@ -253,6 +273,9 @@ function BreakdownRow ({ label, value }: BreakdownRowProps) {
 }
 
 const styles = StyleSheet.create({
+	switcherRow: {
+		marginBottom: spacing.sm,
+	},
 	title: {
 		...typography.title,
 		marginBottom: spacing.sm,
@@ -289,6 +312,10 @@ const styles = StyleSheet.create({
 		...typography.subtitle,
 	},
 	salarySetup: {
+		marginBottom: spacing.sm,
+	},
+	salaryNote: {
+		...typography.caption,
 		marginBottom: spacing.sm,
 	},
 	row: {

@@ -28,8 +28,8 @@ type Props = NativeStackScreenProps<OnboardingStackParamList, 'Confirm'>
 
 export function ConfirmScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
-	const { persistSchedule } = useAppBootstrap()
-	const { draft } = useOnboardingDraft()
+	const { persistSchedule, addProfile, profiles } = useAppBootstrap()
+	const { draft, profileOwnerName } = useOnboardingDraft()
 	const presetId = route.params.presetId
 	const preset = presetId ? requireSchedulePreset(presetId) : null
 	const isCustom = preset == null
@@ -58,13 +58,18 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 					startDate: route.params.startDate,
 					shiftTypes: DEFAULT_SHIFT_TYPES,
 				})
-			await persistSchedule(schedule)
-			navigation.getParent()?.dispatch(
-				CommonActions.reset({
-					index: 0,
-					routes: [{ name: 'Main' }],
-				}),
-			)
+			if (profiles.length === 0) {
+				await persistSchedule(schedule)
+				navigation.getParent()?.dispatch(
+					CommonActions.reset({
+						index: 0,
+						routes: [{ name: 'Main' }],
+					}),
+				)
+			} else {
+				await addProfile(profileOwnerName, schedule)
+				navigation.getParent()?.goBack()
+			}
 		} finally {
 			setSaving(false)
 		}
@@ -106,7 +111,7 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 					disabled={saving}
 				/>
 				<AppButton
-					label="Создать календарь"
+					label={profiles.length === 0 ? 'Создать календарь' : 'Добавить график'}
 					onPress={() => {
 						void handleCreate()
 					}}

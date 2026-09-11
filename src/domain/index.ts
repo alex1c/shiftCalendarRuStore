@@ -36,8 +36,10 @@ export {
 	formatCycleArrows,
 	formatCycleHyphen,
 	formatCycleLetters,
+	formatDayListInMonth,
 	formatDayMonth,
 	formatDayMonthYear,
+	formatInMonth,
 	formatMonthYear,
 	formatShiftHours,
 	formatShiftTitle,
@@ -52,7 +54,7 @@ export {
 	buildMonthGrid,
 	type MonthGridCell,
 } from './calendar-grid'
-export { createWorkScheduleFromCustom, createWorkScheduleFromPreset } from './schedule'
+export { createWorkScheduleFromCustom, createWorkScheduleFromPreset, isWorkSchedule } from './schedule'
 export {
 	CUSTOM_SHIFT_COLOR_TOKENS,
 	DEFAULT_CUSTOM_END_TIME,
@@ -206,3 +208,29 @@ export {
 	type SalarySettings,
 	type SalaryTotals,
 } from './salary'
+export {
+	DEFAULT_PRIMARY_PROFILE_NAME,
+	DEFAULT_SECONDARY_PROFILE_NAME,
+	MAX_PROFILES,
+	MAX_PROFILE_NAME_LENGTH,
+	PROFILE_ACCENTS,
+	PROFILES_DOCUMENT_VERSION,
+	buildScheduleProfile,
+	commonDaysOffInMonth,
+	findCommonDaysOff,
+	findPrimaryProfile,
+	isFreeEffectiveDay,
+	isProfileAccent,
+	isScheduleProfile,
+	nextProfileAccent,
+	normalizeScheduleProfile,
+	profileShortLabel,
+	renameProfile,
+	replaceProfile,
+	resolveActiveProfile,
+	sanitizeProfileName,
+	updateProfileOverrides,
+	updateProfileSchedule,
+	type ProfileAccent,
+	type ScheduleProfile,
+} from './profiles'

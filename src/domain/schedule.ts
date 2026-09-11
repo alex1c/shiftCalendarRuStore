@@ -76,3 +76,21 @@ export function createWorkScheduleFromCustom ({
 		updatedAt: timestamp,
 	}
 }
+
+/** Structural guard for a persisted work schedule document. */
+export function isWorkSchedule (value: unknown): value is WorkSchedule {
+	if (!value || typeof value !== 'object') {
+		return false
+	}
+	const record = value as Partial<WorkSchedule>
+	return (
+		typeof record.id === 'string' &&
+		typeof record.name === 'string' &&
+		typeof record.presetId === 'string' &&
+		typeof record.startDate === 'string' &&
+		Array.isArray(record.cycle) &&
+		record.cycle.length > 0 &&
+		Array.isArray(record.shiftTypes) &&
+		record.shiftTypes.length > 0
+	)
+}

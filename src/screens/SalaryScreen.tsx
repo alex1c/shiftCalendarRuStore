@@ -34,6 +34,8 @@ export function SalaryScreen ({ navigation }: Props) {
 		overrides,
 		salarySettings,
 		persistSalarySettings,
+		primaryProfile,
+		activeProfile,
 	} = useAppBootstrap()
 	const [period, setPeriod] = useState<StatsPeriodKind>('30')
 	const [now, setNow] = useState(() => new Date())
@@ -44,27 +46,29 @@ export function SalaryScreen ({ navigation }: Props) {
 		}, []),
 	)
 
+	const salarySchedule = primaryProfile?.schedule ?? schedule
+	const salaryOverrides = primaryProfile?.overrides ?? overrides
 	const enabled = isSalaryEnabled(salarySettings)
 
 	const range = useMemo(() => {
-		if (!schedule || !enabled) {
+		if (!salarySchedule || !enabled) {
 			return null
 		}
-		return resolveStatsPeriod(period, schedule.startDate, now)
-	}, [schedule, enabled, period, now])
+		return resolveStatsPeriod(period, salarySchedule.startDate, now)
+	}, [salarySchedule, enabled, period, now])
 
 	const totals = useMemo(() => {
-		if (!schedule || !range || !salarySettings || !enabled) {
+		if (!salarySchedule || !range || !salarySettings || !enabled) {
 			return null
 		}
 		return computeSalaryForPeriod(
-			schedule,
-			overrides,
+			salarySchedule,
+			salaryOverrides,
 			salarySettings,
 			range.startDate,
 			range.endDate,
 		)
-	}, [schedule, overrides, salarySettings, range, enabled])
+	}, [salarySchedule, salaryOverrides, salarySettings, range, enabled])
 
 	const handleSave = (next: SalarySettings) => {
 		void persistSalarySettings(next)
@@ -83,6 +87,11 @@ export function SalaryScreen ({ navigation }: Props) {
 	if (!enabled) {
 		return (
 			<Screen includeBottomSafeArea={false}>
+				{primaryProfile ? (
+					<Text style={[styles.owner, { color: colors.textSecondary }]}>
+						{`График: ${primaryProfile.name}`}
+					</Text>
+				) : null}
 				<Text
 					style={[styles.lead, { color: colors.textSecondary }]}
 				>
@@ -106,6 +115,18 @@ export function SalaryScreen ({ navigation }: Props) {
 
 	return (
 		<Screen includeBottomSafeArea={false}>
+			{primaryProfile ? (
+				<Text style={[styles.owner, { color: colors.textSecondary }]}>
+					{`График: ${primaryProfile.name}`}
+				</Text>
+			) : null}
+			{activeProfile &&
+			primaryProfile &&
+			activeProfile.id !== primaryProfile.id ? (
+				<Text style={[styles.owner, { color: colors.textTertiary }]}>
+					Расчёт зарплаты считается только для основного графика.
+				</Text>
+			) : null}
 			<PeriodChips value={period} onChange={setPeriod} />
 			<Text style={[styles.range, { color: colors.textSecondary }]}>
 				{periodLabel}
@@ -185,6 +206,10 @@ const styles = StyleSheet.create({
 	lead: {
 		...typography.body,
 		marginBottom: spacing.md,
+	},
+	owner: {
+		...typography.caption,
+		marginBottom: spacing.sm,
 	},
 	range: {
 		...typography.caption,

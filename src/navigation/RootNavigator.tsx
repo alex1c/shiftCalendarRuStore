@@ -12,7 +12,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import { useTheme } from '@/src/theme'
 import { MainTabNavigator } from './MainTabNavigator'
-import { OnboardingNavigator } from './OnboardingNavigator'
+import { AddProfileNavigator, OnboardingNavigator } from './OnboardingNavigator'
 import type { RootStackParamList } from './types'
 
 const Stack = createNativeStackNavigator<RootStackParamList>()
@@ -46,6 +46,10 @@ export function RootNavigator () {
 					component={OnboardingNavigator}
 				/>
 				<Stack.Screen name="Main" component={MainTabNavigator} />
+				<Stack.Screen
+					name="AddProfile"
+					component={AddProfileNavigator}
+				/>
 			</Stack.Navigator>
 		</NavigationContainer>
 	)

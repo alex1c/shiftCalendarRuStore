@@ -7,6 +7,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
+import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
 import { getTodayOverview } from '@/src/domain'
@@ -89,6 +90,9 @@ export function TodayScreen () {
 
 	return (
 		<Screen includeBottomSafeArea={false}>
+			<View style={styles.switcherRow}>
+				<ProfileSwitcher />
+			</View>
 			<SurfaceCard style={styles.hero}>
 				<Text
 					style={[styles.headline, { color: colors.textPrimary }]}
@@ -202,6 +206,9 @@ export function TodayScreen () {
 }
 
 const styles = StyleSheet.create({
+	switcherRow: {
+		marginBottom: spacing.sm,
+	},
 	title: {
 		...typography.title,
 		marginBottom: spacing.lg,

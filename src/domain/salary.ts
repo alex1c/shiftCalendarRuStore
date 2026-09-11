@@ -56,6 +56,8 @@ export type SalarySettings = {
 	overtimeHourlyRateMinor: number
 	/** 100 = 1×. Extra shifts always use this coefficient. */
 	extraShiftMultiplierHundredths: number
+	/** Owner profile id. Missing on Phase 7 documents; migration fills it. */
+	profileId?: string | null
 	createdAt: string
 	updatedAt: string
 }
@@ -118,6 +120,7 @@ export function defaultSalarySettings (
 		overtimeHourlyRateMinor: 0,
 		extraShiftMultiplierHundredths:
 			DEFAULT_EXTRA_SHIFT_MULTIPLIER_HUNDREDTHS,
+		profileId: null,
 		createdAt: stamp,
 		updatedAt: stamp,
 	}
@@ -149,7 +152,10 @@ export function isSalarySettings (value: unknown): value is SalarySettings {
 		isNonNegativeInt(record.overtimeHourlyRateMinor) &&
 		isNonNegativeInt(record.extraShiftMultiplierHundredths) &&
 		typeof record.createdAt === 'string' &&
-		typeof record.updatedAt === 'string'
+		typeof record.updatedAt === 'string' &&
+		(record.profileId === undefined ||
+			record.profileId === null ||
+			typeof record.profileId === 'string')
 	)
 }
 

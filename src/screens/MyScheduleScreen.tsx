@@ -24,7 +24,7 @@ type Props = NativeStackScreenProps<MoreStackParamList, 'MySchedule'>
 
 export function MyScheduleScreen ({ navigation }: Props) {
 	const { colors } = useTheme()
-	const { schedule, resetSchedule } = useAppBootstrap()
+	const { schedule, activeProfile, profiles, resetSchedule, deleteProfileById } = useAppBootstrap()
 
 	if (!schedule) {
 		return null
@@ -32,12 +32,14 @@ export function MyScheduleScreen ({ navigation }: Props) {
 
 	const custom = isCustomSchedule(schedule)
 	const preset = getSchedulePreset(schedule.presetId)
-	const title = custom ? schedule.name : (preset?.name ?? schedule.name)
+	const title = activeProfile?.name ?? (custom ? schedule.name : (preset?.name ?? schedule.name))
+	const isPrimary = activeProfile?.isPrimary === true
+	const isOnlyProfile = profiles.length <= 1
 
 	const handleReset = () => {
 		Alert.alert(
-			'Сбросить график?',
-			'Текущий график будет удалён. Вы сможете создать его заново.',
+			'Сбросить основной график?',
+			'Основной график будет удалён. Вы сможете создать его заново.',
 			[
 				{ text: 'Отмена', style: 'cancel' },
 				{
@@ -53,6 +55,27 @@ export function MyScheduleScreen ({ navigation }: Props) {
 								}),
 							)
 						})()
+					},
+				},
+			],
+		)
+	}
+
+	const handleDelete = () => {
+		if (!activeProfile) {
+			return
+		}
+		Alert.alert(
+			`Удалить график «${activeProfile.name}»?`,
+			'Смены и изменения этого графика будут удалены.',
+			[
+				{ text: 'Отмена', style: 'cancel' },
+				{
+					text: 'Удалить',
+					style: 'destructive',
+					onPress: () => {
+						void deleteProfileById(activeProfile.id)
+						navigation.goBack()
 					},
 				},
 			],
@@ -113,11 +136,26 @@ export function MyScheduleScreen ({ navigation }: Props) {
 			</SurfaceCard>
 
 			<View style={styles.reset}>
-				<AppButton
-					label="Сбросить график"
-					variant="danger"
-					onPress={handleReset}
-				/>
+				{isPrimary && isOnlyProfile ? (
+					<AppButton
+						label="Сбросить основной график"
+						variant="danger"
+						onPress={handleReset}
+					/>
+				) : null}
+				{isPrimary && !isOnlyProfile ? (
+					<Text style={[styles.hint, { color: colors.textSecondary }]}>
+						Чтобы сбросить основной график, сначала удалите
+						остальные в разделе «Мои графики».
+					</Text>
+				) : null}
+				{!isPrimary ? (
+					<AppButton
+						label="Удалить график"
+						variant="danger"
+						onPress={handleDelete}
+					/>
+				) : null}
 			</View>
 		</Screen>
 	)
@@ -136,5 +174,8 @@ const styles = StyleSheet.create({
 	},
 	reset: {
 		marginTop: spacing.lg,
+	},
+	hint: {
+		...typography.body,
 	},
 })

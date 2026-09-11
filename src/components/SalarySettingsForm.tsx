@@ -227,6 +227,7 @@ export function SalarySettingsForm ({
 			extraShiftMultiplierHundredths: extraHundredths,
 			createdAt: seed.createdAt || now,
 			updatedAt: now,
+			profileId: seed.profileId ?? null,
 		})
 	}
 

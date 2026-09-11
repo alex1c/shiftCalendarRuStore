@@ -7,6 +7,7 @@ export type CustomShiftEditorParams = {
 }
 
 export type OnboardingStackParamList = {
+	ProfileName: undefined
 	PresetSelect: undefined
 	CustomBuilder: undefined
 	CustomShiftEditor: CustomShiftEditorParams
@@ -17,6 +18,7 @@ export type OnboardingStackParamList = {
 
 export type MoreStackParamList = {
 	MoreHome: undefined
+	MySchedules: undefined
 	MySchedule: undefined
 	Salary: undefined
 	SalarySettings: undefined
@@ -39,4 +41,5 @@ export type MainTabParamList = {
 export type RootStackParamList = {
 	Onboarding: undefined
 	Main: undefined
+	AddProfile: undefined
 }

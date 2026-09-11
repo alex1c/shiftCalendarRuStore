@@ -30,8 +30,10 @@ type DraftMutation = ValidationResult<{ cycle: string[] }>
 
 type OnboardingDraftValue = {
 	draft: CustomCycleDraft
+	profileOwnerName: string
 	resetDraft: () => void
 	setName: (name: string) => void
+	setProfileOwnerName: (name: string) => void
 	addShift: (shiftTypeId: string) => DraftMutation
 	addCustomShift: (shift: ShiftType) => DraftMutation
 	updateShiftType: (shift: ShiftType) => void
@@ -52,6 +54,7 @@ export function OnboardingDraftProvider ({
 	children,
 }: OnboardingDraftProviderProps) {
 	const [draft, setDraft] = useState<CustomCycleDraft>(createEmptyCustomDraft)
+	const [profileOwnerName, setProfileOwnerNameState] = useState('')
 	const draftRef = useRef(draft)
 
 	const commitDraft = useCallback(
@@ -66,6 +69,10 @@ export function OnboardingDraftProvider ({
 	const resetDraft = useCallback(() => {
 		commitDraft(() => createEmptyCustomDraft())
 	}, [commitDraft])
+
+	const setProfileOwnerName = useCallback((name: string) => {
+		setProfileOwnerNameState(name)
+	}, [])
 
 	const setName = useCallback((name: string) => {
 		commitDraft((current) => ({ ...current, name }))
@@ -150,8 +157,10 @@ export function OnboardingDraftProvider ({
 	const value = useMemo(
 		() => ({
 			draft,
+			profileOwnerName,
 			resetDraft,
 			setName,
+			setProfileOwnerName,
 			addShift,
 			addCustomShift,
 			updateShiftType,
@@ -163,8 +172,10 @@ export function OnboardingDraftProvider ({
 		}),
 		[
 			draft,
+			profileOwnerName,
 			resetDraft,
 			setName,
+			setProfileOwnerName,
 			addShift,
 			addCustomShift,
 			updateShiftType,

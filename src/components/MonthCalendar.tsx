@@ -23,6 +23,8 @@ type MonthCalendarProps = {
 	cells: MonthGridCell[]
 	shiftsByDate: Record<string, ShiftType>
 	overriddenDates?: ReadonlySet<string>
+	/** Compact two-profile labels `Д/В`. When set, cells skip shift fill. */
+	combinedByDate?: Record<string, { left: string; right: string }>
 	todayDate: string
 	selectedDate: string
 	onSelectDate: (date: string) => void
@@ -33,6 +35,7 @@ export function MonthCalendar ({
 	cells,
 	shiftsByDate,
 	overriddenDates,
+	combinedByDate,
 	todayDate,
 	selectedDate,
 	onSelectDate,
@@ -71,6 +74,7 @@ export function MonthCalendar ({
 					<View key={row[0]?.date ?? 'row'} style={styles.gridRow}>
 						{row.map((cell, column) => {
 							const shift = shiftsByDate[cell.date]
+							const combined = combinedByDate?.[cell.date]
 							const palette = shiftPalette(
 								shift?.color ?? 'off',
 								colors,
@@ -81,7 +85,9 @@ export function MonthCalendar ({
 							const faded = !cell.inCurrentMonth && !isSelected
 							const isOverridden = overriddenDates?.has(cell.date) ?? false
 
-							let backgroundColor = palette.background
+							let backgroundColor = combined
+								? colors.surface
+								: palette.background
 							let borderColor = 'transparent'
 							let borderWidth = 2
 							if (isSelected && isToday) {
@@ -97,7 +103,9 @@ export function MonthCalendar ({
 								borderWidth = 3
 							}
 
-							const shortName = shift?.shortName ?? ''
+							const shortName = combined
+								? `${combined.left}/${combined.right}`
+								: (shift?.shortName ?? '')
 
 							return (
 								<Pressable
@@ -117,6 +125,7 @@ export function MonthCalendar ({
 									}
 									style={[
 										styles.cell,
+										combined ? styles.cellCombined : null,
 										{
 											backgroundColor,
 											borderColor,
@@ -149,8 +158,14 @@ export function MonthCalendar ({
 										style={[
 											styles.shiftLetter,
 											{
-												color: palette.foreground,
-												fontSize: shortName.length >= 3 ? 11 : 12,
+												color: combined
+													? colors.textPrimary
+													: palette.foreground,
+												fontSize: shortName.length >= 4
+													? 10
+													: shortName.length >= 3
+														? 11
+														: 12,
 											},
 										]}
 										numberOfLines={1}
@@ -194,6 +209,9 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 		paddingVertical: spacing.xxs,
+	},
+	cellCombined: {
+		minHeight: touchTarget.min + 4,
 	},
 	overrideDot: {
 		position: 'absolute',

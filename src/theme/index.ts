@@ -1,6 +1,7 @@
 export {
 	colors,
 	elevation,
+	profileAccentPalette,
 	radius,
 	shiftPalette,
 	spacing,

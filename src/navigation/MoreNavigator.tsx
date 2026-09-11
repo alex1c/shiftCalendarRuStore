@@ -8,6 +8,7 @@ import { AboutScreen } from '@/src/screens/AboutScreen'
 import { LearningScreen } from '@/src/screens/LearningScreen'
 import { MoreScreen } from '@/src/screens/MoreScreen'
 import { MyScheduleScreen } from '@/src/screens/MyScheduleScreen'
+import { ProfilesScreen } from '@/src/screens/ProfilesScreen'
 import { SalaryScreen } from '@/src/screens/SalaryScreen'
 import { SalarySettingsScreen } from '@/src/screens/SalarySettingsScreen'
 import { useTheme } from '@/src/theme'
@@ -32,6 +33,11 @@ export function MoreNavigator () {
 				name="MoreHome"
 				component={MoreScreen}
 				options={{ headerShown: false }}
+			/>
+			<Stack.Screen
+				name="MySchedules"
+				component={ProfilesScreen}
+				options={{ title: 'Мои графики' }}
 			/>
 			<Stack.Screen
 				name="MySchedule"

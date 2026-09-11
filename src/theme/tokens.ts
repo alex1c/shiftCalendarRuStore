@@ -252,6 +252,43 @@ export type ThemeColors = {
 	shiftOvertimeFg: string
 }
 
+export const PROFILE_ACCENT_PALETTE = {
+	light: {
+		blue: { foreground: '#2E4568', background: '#D7E0EE' },
+		green: { foreground: '#3A5A32', background: '#D7E4D0' },
+		purple: { foreground: '#4A3A6B', background: '#DDD4EC' },
+		orange: { foreground: '#6B4E10', background: '#F4E0B8' },
+		teal: { foreground: '#1F5C52', background: '#D4E8E2' },
+	},
+	dark: {
+		blue: { foreground: '#B4C7E4', background: '#1E2A40' },
+		green: { foreground: '#C5DDB8', background: '#2A3A28' },
+		purple: { foreground: '#C8B8E8', background: '#2C243C' },
+		orange: { foreground: '#F0D08A', background: '#3F3214' },
+		teal: { foreground: '#A8D4CB', background: '#1C3330' },
+	},
+} as const
+
+export function profileAccentPalette (
+	accent: string,
+	scheme: ColorSchemeName,
+): { background: string; foreground: string } {
+	const pack = PROFILE_ACCENT_PALETTE[scheme]
+	if (accent === 'green') {
+		return pack.green
+	}
+	if (accent === 'purple') {
+		return pack.purple
+	}
+	if (accent === 'orange') {
+		return pack.orange
+	}
+	if (accent === 'teal') {
+		return pack.teal
+	}
+	return pack.blue
+}
+
 /** Map a shift kind / color token to chip colors for the active scheme. */
 export function shiftPalette (
 	colorToken: string,

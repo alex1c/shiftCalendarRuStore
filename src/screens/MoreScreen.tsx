@@ -23,6 +23,10 @@ export function MoreScreen ({ navigation }: Props) {
 			<SurfaceCard style={styles.card}>
 				<View>
 					<SecondaryLink
+						label="Мои графики"
+						onPress={() => navigation.navigate('MySchedules')}
+					/>
+					<SecondaryLink
 						label="Мой график"
 						onPress={() => navigation.navigate('MySchedule')}
 					/>

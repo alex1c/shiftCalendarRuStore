@@ -131,6 +131,44 @@ export function formatDayMonthYear (iso: string): string {
 	return `${day} ${MONTHS_GENITIVE[month - 1]} ${year}`
 }
 
+const MONTHS_PREPOSITIONAL = [
+	'январе',
+	'феврале',
+	'марте',
+	'апреле',
+	'мае',
+	'июне',
+	'июле',
+	'августе',
+	'сентябре',
+	'октябре',
+	'ноябре',
+	'декабре',
+] as const
+
+/** `в сентябре`. */
+export function formatInMonth (month: number): string {
+	const name = MONTHS_PREPOSITIONAL[month - 1]
+	if (!name) {
+		throw new Error(`Invalid month: ${month}`)
+	}
+	return `в ${name}`
+}
+
+/**
+ * Compact same-month list: `7, 8, 19, 20 сентября`.
+ * Empty input returns an empty string.
+ */
+export function formatDayListInMonth (dates: readonly string[]): string {
+	if (dates.length === 0) {
+		return ''
+	}
+	const first = parseCalendarDate(dates[0]!)
+	const days = dates.map((date) => parseCalendarDate(date).day)
+	const month = MONTHS_GENITIVE[first.month - 1]
+	return `${days.join(', ')} ${month}`
+}
+
 /** `Сентябрь 2026`. */
 export function formatMonthYear (year: number, month: number): string {
 	const name = MONTHS_NOMINATIVE[month - 1]
