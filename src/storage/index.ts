@@ -1,5 +1,6 @@
 /**
- * Local persistence for schedule profiles, overrides and salary settings.
+ * Local persistence for schedule profiles, overrides, salary and
+ * notification settings.
  *
  * AsyncStorage is used on purpose: one JSON document per key, a clean
  * repository API, and no native SQLite prepare/finalize races. The UI talks
@@ -10,6 +11,8 @@
  *
  * Schema v3 stores profiles at `@shiftcalendar/profiles`. Legacy v1/v2
  * single-schedule documents are migrated into a primary profile named `Я`.
+ * Reminder settings live at `@shiftcalendar/notifications` and survive a
+ * schedule reset, same as salary.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -22,14 +25,18 @@ import {
 	emptyOverrideMap,
 	findPrimaryProfile,
 	isDayOverride,
+	isNotificationSettings,
 	isSalarySettings,
 	isScheduleProfile,
 	isWorkSchedule,
+	normalizeNotificationSettings,
 	normalizeScheduleProfile,
 	replaceProfile,
 	resolveActiveProfile,
 	updateProfileOverrides,
 	updateProfileSchedule,
+	NOTIFICATION_SETTINGS_SCHEMA_VERSION,
+	type NotificationSettings,
 	type SalarySettings,
 	type ScheduleProfile,
 } from '@/src/domain'
@@ -56,6 +63,11 @@ type StoredActiveProfile = {
 type StoredSalary = {
 	schemaVersion: number
 	settings: SalarySettings
+}
+
+type StoredNotifications = {
+	schemaVersion: number
+	settings: NotificationSettings
 }
 
 let migrated = false
@@ -165,6 +177,26 @@ function parseSalarySettings (value: unknown): SalarySettings | null {
 		return candidate
 	}
 	return candidate
+}
+
+function parseNotificationSettings (
+	value: unknown,
+): NotificationSettings | null {
+	if (!value || typeof value !== 'object') {
+		return null
+	}
+	const record = value as Partial<StoredNotifications> &
+		Partial<NotificationSettings>
+	const nested = record.settings
+	const candidate = isNotificationSettings(nested)
+		? nested
+		: isNotificationSettings(record)
+			? record
+			: null
+	if (!candidate) {
+		return null
+	}
+	return normalizeNotificationSettings(candidate)
 }
 
 async function writeProfiles (profiles: ScheduleProfile[]): Promise<void> {
@@ -382,6 +414,31 @@ export async function clearSalarySettings (): Promise<void> {
 	await AsyncStorage.removeItem(STORAGE_KEYS.salary)
 }
 
+/** Load shift-reminder settings. Missing or corrupt JSON is unset. */
+export async function getNotificationSettings (): Promise<NotificationSettings | null> {
+	await ensureStorageMigrated()
+	const stored = await readJson<unknown>(STORAGE_KEYS.notifications)
+	return parseNotificationSettings(stored)
+}
+
+/** Persist versioned reminder settings (independent of the schedule). */
+export async function saveNotificationSettings (
+	settings: NotificationSettings,
+): Promise<void> {
+	await ensureStorageMigrated()
+	const payload: StoredNotifications = {
+		schemaVersion: NOTIFICATION_SETTINGS_SCHEMA_VERSION,
+		settings: normalizeNotificationSettings(settings),
+	}
+	await writeJson(STORAGE_KEYS.notifications, payload)
+}
+
+/** User-initiated wipe of reminder settings only. */
+export async function clearNotificationSettings (): Promise<void> {
+	await ensureStorageMigrated()
+	await AsyncStorage.removeItem(STORAGE_KEYS.notifications)
+}
+
 /** Load date-keyed day overrides for the active profile. */
 export async function getDayOverrides (): Promise<DayOverrideMap> {
 	const profile = await activeProfile()
@@ -420,6 +477,7 @@ export async function clearAllStorageForTests (): Promise<void> {
 		STORAGE_KEYS.schedule,
 		STORAGE_KEYS.overrides,
 		STORAGE_KEYS.salary,
+		STORAGE_KEYS.notifications,
 		STORAGE_KEYS.profiles,
 		STORAGE_KEYS.activeProfile,
 	])

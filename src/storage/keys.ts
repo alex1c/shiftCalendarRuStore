@@ -11,4 +11,5 @@ export const STORAGE_KEYS = {
 	salary: '@shiftcalendar/salary',
 	profiles: '@shiftcalendar/profiles',
 	activeProfile: '@shiftcalendar/activeProfile',
+	notifications: '@shiftcalendar/notifications',
 } as const

@@ -8,6 +8,7 @@ import { AboutScreen } from '@/src/screens/AboutScreen'
 import { LearningScreen } from '@/src/screens/LearningScreen'
 import { MoreScreen } from '@/src/screens/MoreScreen'
 import { MyScheduleScreen } from '@/src/screens/MyScheduleScreen'
+import { NotificationsScreen } from '@/src/screens/NotificationsScreen'
 import { ProfilesScreen } from '@/src/screens/ProfilesScreen'
 import { SalaryScreen } from '@/src/screens/SalaryScreen'
 import { SalarySettingsScreen } from '@/src/screens/SalarySettingsScreen'
@@ -53,6 +54,11 @@ export function MoreNavigator () {
 				name="SalarySettings"
 				component={SalarySettingsScreen}
 				options={{ title: 'Настройки оплаты' }}
+			/>
+			<Stack.Screen
+				name="Notifications"
+				component={NotificationsScreen}
+				options={{ title: 'Уведомления' }}
 			/>
 			<Stack.Screen
 				name="Learning"

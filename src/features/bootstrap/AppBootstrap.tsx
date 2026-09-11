@@ -1,6 +1,7 @@
 /**
- * App bootstrap — load profiles, the active schedule and salary settings.
- * Native storage reads stay sequential.
+ * App bootstrap — load profiles, salary and notification settings.
+ * Native storage reads stay sequential. Shift reminders reschedule after
+ * a save or a safe app-launch pass — never from render.
  */
 
 import {
@@ -29,17 +30,24 @@ import {
 	updateProfileOverrides,
 	updateProfileSchedule,
 	upsertOverride,
+	type NotificationSettings,
 	type SalarySettings,
 	type ScheduleProfile,
 } from '@/src/domain'
 import {
+	configureNotificationHandling,
+	rescheduleShiftNotifications,
+} from '@/src/notifications'
+import {
 	clearSalarySettings,
 	clearWorkSchedule,
 	getActiveProfileId,
+	getNotificationSettings,
 	getProfiles,
 	getSalarySettings,
 	saveDayOverrides,
 	saveActiveProfileId,
+	saveNotificationSettings,
 	saveProfiles,
 	saveSalarySettings,
 } from '@/src/storage'
@@ -53,6 +61,7 @@ type AppBootstrapValue = {
 	schedule: WorkSchedule | null
 	overrides: DayOverrideMap
 	salarySettings: SalarySettings | null
+	notificationSettings: NotificationSettings | null
 	ready: boolean
 	canAddProfile: boolean
 	refreshSchedule: () => Promise<void>
@@ -64,6 +73,7 @@ type AppBootstrapValue = {
 	renameProfileById: (id: string, name: string) => Promise<void>
 	deleteProfileById: (id: string) => Promise<void>
 	persistSalarySettings: (settings: SalarySettings) => Promise<void>
+	persistNotificationSettings: (settings: NotificationSettings) => Promise<void>
 	resetSalarySettings: () => Promise<void>
 	resetSchedule: () => Promise<void>
 }
@@ -75,6 +85,7 @@ const AppBootstrapContext = createContext<AppBootstrapValue>({
 	schedule: null,
 	overrides: emptyOverrideMap(),
 	salarySettings: null,
+	notificationSettings: null,
 	ready: false,
 	canAddProfile: false,
 	refreshSchedule: async () => undefined,
@@ -86,6 +97,7 @@ const AppBootstrapContext = createContext<AppBootstrapValue>({
 	renameProfileById: async () => undefined,
 	deleteProfileById: async () => undefined,
 	persistSalarySettings: async () => undefined,
+	persistNotificationSettings: async () => undefined,
 	resetSalarySettings: async () => undefined,
 	resetSchedule: async () => undefined,
 })
@@ -101,6 +113,8 @@ export function AppBootstrapProvider ({
 	const [activeProfileId, setActiveId] = useState<string | null>(null)
 	const [salarySettings, setSalarySettings] =
 		useState<SalarySettings | null>(null)
+	const [notificationSettings, setNotificationSettings] =
+		useState<NotificationSettings | null>(null)
 	const [ready, setReady] = useState(false)
 
 	const activeProfile = useMemo(
@@ -115,13 +129,25 @@ export function AppBootstrapProvider ({
 	const overrides = activeProfile?.overrides ?? emptyOverrideMap()
 	const canAddProfile = profiles.length < MAX_PROFILES
 
+	const queueReschedule = useCallback((
+		nextProfiles: ScheduleProfile[],
+		nextSettings: NotificationSettings | null,
+	) => {
+		void rescheduleShiftNotifications({
+			profiles: nextProfiles,
+			settings: nextSettings,
+		})
+	}, [])
+
 	const refreshSchedule = useCallback(async () => {
 		const nextProfiles = await getProfiles()
 		const nextActiveId = await getActiveProfileId()
 		const nextSalary = await getSalarySettings()
+		const nextNotifications = await getNotificationSettings()
 		setProfiles(nextProfiles)
 		setActiveId(nextActiveId)
 		setSalarySettings(nextSalary)
+		setNotificationSettings(nextNotifications)
 	}, [])
 
 	const persistProfiles = useCallback(
@@ -154,11 +180,22 @@ export function AppBootstrapProvider ({
 				isPrimary: true,
 			})
 			await persistProfiles([profile], profile.id)
+			queueReschedule([profile], notificationSettings)
 			return
 		}
 		const updated = updateProfileSchedule(activeProfile, next)
-		await persistProfiles(replaceProfile(profiles, updated))
-	}, [activeProfile, persistProfiles, profiles])
+		const nextProfiles = replaceProfile(profiles, updated)
+		await persistProfiles(nextProfiles)
+		if (activeProfile.isPrimary) {
+			queueReschedule(nextProfiles, notificationSettings)
+		}
+	}, [
+		activeProfile,
+		notificationSettings,
+		persistProfiles,
+		profiles,
+		queueReschedule,
+	])
 
 	const persistDayOverride = useCallback(async (override: DayOverride) => {
 		if (!activeProfile) {
@@ -166,9 +203,19 @@ export function AppBootstrapProvider ({
 		}
 		const nextOverrides = upsertOverride(activeProfile.overrides, override)
 		const updated = updateProfileOverrides(activeProfile, nextOverrides)
-		await persistProfiles(replaceProfile(profiles, updated))
+		const nextProfiles = replaceProfile(profiles, updated)
+		await persistProfiles(nextProfiles)
 		await saveDayOverrides(nextOverrides)
-	}, [activeProfile, persistProfiles, profiles])
+		if (activeProfile.isPrimary) {
+			queueReschedule(nextProfiles, notificationSettings)
+		}
+	}, [
+		activeProfile,
+		notificationSettings,
+		persistProfiles,
+		profiles,
+		queueReschedule,
+	])
 
 	const clearDayOverride = useCallback(async (date: string) => {
 		if (!activeProfile) {
@@ -179,9 +226,19 @@ export function AppBootstrapProvider ({
 			date,
 		)
 		const updated = updateProfileOverrides(activeProfile, nextOverrides)
-		await persistProfiles(replaceProfile(profiles, updated))
+		const nextProfiles = replaceProfile(profiles, updated)
+		await persistProfiles(nextProfiles)
 		await saveDayOverrides(nextOverrides)
-	}, [activeProfile, persistProfiles, profiles])
+		if (activeProfile.isPrimary) {
+			queueReschedule(nextProfiles, notificationSettings)
+		}
+	}, [
+		activeProfile,
+		notificationSettings,
+		persistProfiles,
+		profiles,
+		queueReschedule,
+	])
 
 	const addProfile = useCallback(async (
 		name: string,
@@ -234,6 +291,15 @@ export function AppBootstrapProvider ({
 		[primaryProfile?.id],
 	)
 
+	const persistNotificationSettings = useCallback(
+		async (next: NotificationSettings) => {
+			await saveNotificationSettings(next)
+			setNotificationSettings(next)
+			queueReschedule(profiles, next)
+		},
+		[profiles, queueReschedule],
+	)
+
 	const resetSalarySettings = useCallback(async () => {
 		await clearSalarySettings()
 		setSalarySettings(null)
@@ -243,6 +309,11 @@ export function AppBootstrapProvider ({
 		await clearWorkSchedule()
 		setProfiles([])
 		setActiveId(null)
+		queueReschedule([], notificationSettings)
+	}, [notificationSettings, queueReschedule])
+
+	useEffect(() => {
+		configureNotificationHandling()
 	}, [])
 
 	useEffect(() => {
@@ -252,16 +323,19 @@ export function AppBootstrapProvider ({
 				const nextProfiles = await getProfiles()
 				const nextActiveId = await getActiveProfileId()
 				const nextSalary = await getSalarySettings()
+				const nextNotifications = await getNotificationSettings()
 				if (!cancelled) {
 					setProfiles(nextProfiles)
 					setActiveId(nextActiveId)
 					setSalarySettings(nextSalary)
+					setNotificationSettings(nextNotifications)
 				}
 			} catch {
 				if (!cancelled) {
 					setProfiles([])
 					setActiveId(null)
 					setSalarySettings(null)
+					setNotificationSettings(null)
 				}
 			} finally {
 				if (!cancelled) {
@@ -274,6 +348,15 @@ export function AppBootstrapProvider ({
 		}
 	}, [])
 
+	useEffect(() => {
+		if (!ready) {
+			return
+		}
+		queueReschedule(profiles, notificationSettings)
+		// Launch-only rebuild: later saves call queueReschedule explicitly.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [ready])
+
 	const value = useMemo(
 		() => ({
 			profiles,
@@ -282,6 +365,7 @@ export function AppBootstrapProvider ({
 			schedule,
 			overrides,
 			salarySettings,
+			notificationSettings,
 			ready,
 			canAddProfile,
 			refreshSchedule,
@@ -293,6 +377,7 @@ export function AppBootstrapProvider ({
 			renameProfileById,
 			deleteProfileById,
 			persistSalarySettings,
+			persistNotificationSettings,
 			resetSalarySettings,
 			resetSchedule,
 		}),
@@ -303,6 +388,7 @@ export function AppBootstrapProvider ({
 			schedule,
 			overrides,
 			salarySettings,
+			notificationSettings,
 			ready,
 			canAddProfile,
 			refreshSchedule,
@@ -314,6 +400,7 @@ export function AppBootstrapProvider ({
 			renameProfileById,
 			deleteProfileById,
 			persistSalarySettings,
+			persistNotificationSettings,
 			resetSalarySettings,
 			resetSchedule,
 		],

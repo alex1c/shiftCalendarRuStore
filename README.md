@@ -32,11 +32,17 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 6 — Statistics tab** is implemented.
+**Phase 9 — Shift notifications** is implemented.
 
-The Статистика screen totals effective days for 7/30/90 days, the current
-month, the current year, or startDate→today: work shifts and hours,
-day/night/other, offs, vacation, sick, day-off, extra shifts, overtime.
+Users can opt into local reminders for the **primary** schedule only
+(default OFF). Offsets: 24h / 12h / 2h / 1h / custom (15 minutes … 7 days),
+at most two at once. The planner uses effective days (overrides, extra
+shifts, custom work, overnight) and rebuilds a 30-day window after launch
+or a schedule / override / settings save.
+
+Permission is requested only after the user enables reminders.
+Android channel: «Напоминания о сменах». Exact alarms and alarm-clock
+behavior are out of scope.
 
 ## Stack
 
@@ -46,6 +52,7 @@ day/night/other, offs, vacation, sick, day-off, extra shifts, overtime.
 - TypeScript (strict)
 - React Navigation (stack + bottom tabs)
 - AsyncStorage (versioned JSON, sequential access)
+- expo-notifications (local DATE triggers, not push / FCM)
 - Jest + ESLint
 - Android-first / RuStore
 
@@ -68,9 +75,10 @@ Requires Node.js >= 20.19.4.
 ```
 src/
   components/     UI primitives (calendar grid, chips, screen shell)
-  screens/        Onboarding, calendar, placeholders, more
+  screens/        Onboarding, calendar, today, more, notifications
   navigation/     Root stack, tabs, nested more stack
-  domain/         Shift types, presets, cycle engine, civil dates
+  domain/         Cycle engine, civil dates, salary, notification plan
+  notifications/  Native adapter (permissions, channel, schedule)
   storage/        AsyncStorage repository
   theme/          Light/dark tokens
   utils/          Ids
@@ -80,6 +88,50 @@ src/
 
 UI never walks dates to compute a shift. The cycle engine uses
 `day difference + positive modulo` on `YYYY-MM-DD` civil dates.
+
+Reminder copy and trigger instants come from the pure function
+`buildNotificationPlan`. `NotificationService` is the only module that
+imports `expo-notifications`.
+
+## Notifications
+
+- Settings key: `@shiftcalendar/notifications`
+- Default: disabled, one 1-hour offset stored for when the user opts in
+- Planning window: next 30 civil days, primary profile only
+- Identifiers: `shift_reminder_{profileId}_{YYYY-MM-DD}_{offsetMinutes}`
+- Permission status is read from the OS, never stored as source of truth
+- Reschedule on app launch (non-blocking) and after primary schedule /
+  override / notification-settings saves
+- Secondary profile edits do not rebuild primary reminders
+
+### Expo Go
+
+Local scheduled notifications remain available in Expo Go on SDK 57.
+Push / remote notifications are not. Do not treat Expo Go as proof of
+delivery while the app is killed.
+
+### Reboot
+
+Phase 9 does **not** guarantee that pending reminders survive a device
+reboot. Settings persist, and the next app launch rebuilds the 30-day
+plan when reminders are enabled and permission is granted.
+
+## Release blockers
+
+### NOTIFICATION REAL DEVICE QA (required before release)
+
+On a real Android device, verify:
+
+- POST_NOTIFICATIONS permission (grant / deny / open settings)
+- Delivery while the app is closed
+- Behavior after reboot (expect rebuild on next launch, not silent restore)
+- Battery optimization / OEM background limits
+- Gesture navigation and 3-button navigation
+- Actual notification appearance (title, body, channel, dark shade)
+- Vacation / extra-shift reschedule after an override save
+- Overnight shifts and previous-day 12h reminders on the device clock
+
+This checkpoint is independent of Expo Go / AVD smoke tests.
 
 ## Roadmap
 
@@ -97,12 +149,12 @@ UI never walks dates to compute a shift. The cycle engine uses
 - P11 Share / PDF
 - P12 Backup / Restore
 - P13 Learning
-- P14 UX polish
+- P14 UX polish / real-device bottom safe-area audit
 - P15 Ads + AppMetrica
 - P16 Release
 
 ## Out of scope for this phase
 
-Salary, extra profiles, family mode, PDF, share image, backup ZIP,
-restore, РСЯ, AppMetrica, production signing, widget, alarms,
-rich notifications, internet holidays, cloud sync, range vacation editor.
+Exact alarms, alarm clock, secondary-profile notifications, FCM / push,
+Firebase, widget, PDF, share, backup ZIP, restore, ads, AppMetrica,
+production signing, internet holidays, cloud sync.

@@ -10,7 +10,7 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
-import { getTodayOverview } from '@/src/domain'
+import { getTodayOverview, formatEnabledRemindersCaption } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import type { MainTabParamList } from '@/src/navigation/types'
 import {
@@ -25,7 +25,8 @@ export function TodayScreen () {
 	const { colors } = useTheme()
 	const navigation =
 		useNavigation<BottomTabNavigationProp<MainTabParamList, 'Today'>>()
-	const { schedule, overrides, clearDayOverride } = useAppBootstrap()
+	const { schedule, overrides, clearDayOverride, notificationSettings } =
+		useAppBootstrap()
 	const [now, setNow] = useState(() => new Date())
 
 	const refreshNow = useCallback(() => {
@@ -123,6 +124,13 @@ export function TodayScreen () {
 				{overview.breakLine ? (
 					<Text style={[styles.meta, { color: colors.textTertiary }]}>
 						{overview.breakLine}
+					</Text>
+				) : null}
+				{notificationSettings?.enabled ? (
+					<Text style={[styles.meta, { color: colors.textTertiary }]}>
+						{formatEnabledRemindersCaption(
+							notificationSettings.offsetsMinutes,
+						)}
 					</Text>
 				) : null}
 			</SurfaceCard>
