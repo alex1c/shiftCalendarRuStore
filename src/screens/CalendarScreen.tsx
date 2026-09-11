@@ -3,7 +3,7 @@
  */
 
 import { useCallback, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Ionicons } from '@expo/vector-icons'
 import { useFocusEffect } from '@react-navigation/native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
@@ -31,6 +31,7 @@ import {
 	parseCalendarDate,
 	todayCalendarDate,
 } from '@/src/domain'
+import { createAndShareCalendarPdf } from '@/src/export'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import type { CalendarStackParamList } from '@/src/navigation/types'
 import {
@@ -57,6 +58,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	const [selectedDate, setSelectedDate] = useState(today)
 	const [combined, setCombined] = useState(false)
 	const [peerId, setPeerId] = useState<string | null>(null)
+	const [sharingPdf, setSharingPdf] = useState(false)
 
 	const handleSelectDate = useCallback((date: string) => {
 		const parts = parseCalendarDate(date)
@@ -221,6 +223,60 @@ export function CalendarScreen ({ navigation, route }: Props) {
 		navigation.navigate('EditDay', { date })
 	}
 
+	const handleSharePdf = useCallback(() => {
+		if (sharingPdf || !activeProfile) {
+			return
+		}
+		setSharingPdf(true)
+		void (async () => {
+			try {
+				const secondary =
+					showCombined && peerProfile ? peerProfile : null
+				await createAndShareCalendarPdf({
+					year: visible.year,
+					month: visible.month,
+					primary: activeProfile,
+					secondary,
+					combined: secondary != null,
+				})
+			} catch (error) {
+				const message =
+					error instanceof Error && error.message === 'SHARE_UNAVAILABLE'
+						? 'Не удалось открыть меню «Поделиться»'
+						: 'Не удалось создать PDF'
+				Alert.alert('Поделиться', message)
+			} finally {
+				setSharingPdf(false)
+			}
+		})()
+	}, [
+		activeProfile,
+		peerProfile,
+		sharingPdf,
+		showCombined,
+		visible.month,
+		visible.year,
+	])
+
+	const handleSharePress = useCallback(() => {
+		if (sharingPdf) {
+			return
+		}
+		Alert.alert(
+			'Поделиться графиком',
+			'Выберите формат',
+			[
+				{
+					text: 'PDF',
+					onPress: () => {
+						handleSharePdf()
+					},
+				},
+				{ text: 'Отмена', style: 'cancel' },
+			],
+		)
+	}, [handleSharePdf, sharingPdf])
+
 	if (!schedule || !selectedDay || !todayDay) {
 		return null
 	}
@@ -249,7 +305,18 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					accessibilityLabel="Следующий месяц"
 					onPress={() => goToMonth(1)}
 				/>
+				<HeaderIconButton
+					icon="share-outline"
+					accessibilityLabel="Поделиться"
+					disabled={sharingPdf}
+					onPress={handleSharePress}
+				/>
 			</View>
+			{sharingPdf ? (
+				<Text style={[styles.sharingHint, { color: colors.textSecondary }]}>
+					Создаём PDF…
+				</Text>
+			) : null}
 			<Pressable
 				accessibilityRole="button"
 				accessibilityLabel="Вернуться к текущему месяцу"
@@ -493,21 +560,24 @@ export function CalendarScreen ({ navigation, route }: Props) {
 }
 
 type HeaderIconButtonProps = {
-	icon: 'chevron-back' | 'chevron-forward'
+	icon: 'chevron-back' | 'chevron-forward' | 'share-outline'
 	accessibilityLabel: string
 	onPress: () => void
+	disabled?: boolean
 }
 
 function HeaderIconButton ({
 	icon,
 	accessibilityLabel,
 	onPress,
+	disabled = false,
 }: HeaderIconButtonProps) {
 	const { colors } = useTheme()
 	return (
 		<Pressable
 			accessibilityRole="button"
 			accessibilityLabel={accessibilityLabel}
+			disabled={disabled}
 			onPress={onPress}
 			hitSlop={4}
 			style={({ pressed }) => [
@@ -515,7 +585,7 @@ function HeaderIconButton ({
 				{
 					backgroundColor: colors.surface,
 					borderColor: colors.border,
-					opacity: pressed ? 0.85 : 1,
+					opacity: disabled ? 0.45 : pressed ? 0.85 : 1,
 				},
 			]}
 		>
@@ -557,6 +627,11 @@ const styles = StyleSheet.create({
 	},
 	todayButtonLabel: {
 		...typography.bodyStrong,
+	},
+	sharingHint: {
+		...typography.caption,
+		textAlign: 'center',
+		marginBottom: spacing.sm,
 	},
 	modeRow: {
 		flexDirection: 'row',

@@ -23,17 +23,25 @@ jest.mock('expo-notifications', () => ({
 jest.mock('expo-file-system', () => {
 	class MockFile {
 		uri: string
+		exists = false
 		constructor (...parts: unknown[]) {
 			this.uri = parts.map(String).join('/')
 		}
 		create () {
+			this.exists = true
 			return undefined
 		}
 		write () {
 			return undefined
 		}
+		delete () {
+			this.exists = false
+		}
 		async text () {
 			return ''
+		}
+		async move (_destination: { uri: string }) {
+			return undefined
 		}
 	}
 	return {
@@ -55,4 +63,12 @@ jest.mock('expo-sharing', () => ({
 
 jest.mock('expo-document-picker', () => ({
 	getDocumentAsync: jest.fn(async () => ({ canceled: true, assets: null })),
+}))
+
+jest.mock('expo-print', () => ({
+	printToFileAsync: jest.fn(async () => ({
+		uri: 'file:///cache/Print.pdf',
+		numberOfPages: 1,
+	})),
+	Orientation: { landscape: 'landscape', portrait: 'portrait' },
 }))

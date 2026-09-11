@@ -265,6 +265,22 @@ export {
 	type UpcomingShiftPreview,
 } from './notifications'
 export {
+	PDF_APP_TITLE,
+	PDF_OVERRIDE_LEGEND,
+	PDF_OVERRIDE_MARKER,
+	buildCalendarPdfFileName,
+	buildMonthExportModel,
+	collectInMonthShortNames,
+	escapeHtml,
+	toAsciiFileSlug,
+	type BuildMonthExportModelInput,
+	type CalendarExportCell,
+	type CalendarExportLegendItem,
+	type CalendarExportMode,
+	type CalendarExportModel,
+	type CalendarExportSummaryLine,
+} from './export-calendar'
+export {
 	BACKUP_APP_ID,
 	BACKUP_APP_LABEL,
 	BACKUP_ERROR_MESSAGES,

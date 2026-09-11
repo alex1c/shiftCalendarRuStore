@@ -32,13 +32,15 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 10 — Backup / restore** is implemented.
+**Phase 11 — Calendar PDF sharing** is implemented.
 
-Users can export a versioned JSON backup of profiles, overrides, active
-profile, salary settings and notification settings, then share the file
-through the system sheet. Restore validates and previews the file, asks
-for destructive confirmation, then atomically replaces local data and
-rebuilds shift reminders for the restored primary profile.
+From the calendar header, users can share the **visible month** as a local
+PDF (single active profile or combined two-profile view). The PDF uses
+effective days (overrides included), a Monday-first grid, Russian labels,
+legend, month summary and optional common days off. Generation is
+`expo-print` HTML → PDF; delivery is the system share sheet.
+
+Image export is deferred.
 
 ## Stack
 
@@ -50,6 +52,7 @@ rebuilds shift reminders for the restored primary profile.
 - AsyncStorage (versioned JSON, sequential access)
 - expo-notifications (local DATE triggers, not push / FCM)
 - expo-file-system / expo-sharing / expo-document-picker
+- expo-print (HTML → PDF)
 - Jest + ESLint
 - Android-first / RuStore
 
@@ -74,7 +77,8 @@ src/
   components/     UI primitives (calendar grid, chips, screen shell)
   screens/        Onboarding, calendar, today, more, notifications, backup
   navigation/     Root stack, tabs, nested more stack
-  domain/         Cycle engine, civil dates, salary, notifications, backup
+  domain/         Cycle engine, civil dates, salary, notifications, backup, export
+  export/         Calendar PDF HTML + print/share service
   backup/         File export/import + restore orchestration
   notifications/  Native adapter (permissions, channel, schedule)
   storage/        AsyncStorage repository
@@ -87,54 +91,51 @@ src/
 UI never walks dates to compute a shift. The cycle engine uses
 `day difference + positive modulo` on `YYYY-MM-DD` civil dates.
 
+## Calendar PDF
+
+- Entry: Calendar header share → PDF
+- Page: A4 landscape, light document theme
+- Data: effective days for the visible month only
+- Modes: single active profile, or combined (max 2)
+- Filename examples:
+  - `Moi_grafik_smen_2026-09.pdf`
+  - `Moi_grafik_smen_marina_2026-09.pdf`
+  - `Moi_grafik_smen_combined_ya_marina_2026-09.pdf`
+- Salary and day notes are not included
+- Image share: deferred
+
 ## Backup
 
-- Format: versioned JSON (`backupVersion: 1`, app id =
-  `com.calculatorplatform.shiftcalendar`)
-- Includes: profiles (+ schedules, shift types, overrides, notes),
-  activeProfileId, salarySettings, notificationSettings
-- Excludes: pending native notification ids, Expo/dev transient data
-- Filename: `Moi_grafik_smen_backup_YYYY-MM-DD_HH-mm.json`
-- Restore: migrate → validate → prepare → atomic `multiSet` replace
-- After restore: `rescheduleShiftNotifications` for the primary profile
-- Confirmation required before destructive replace
-
-## Notifications
-
-Local shift reminders (Phase 9) remain primary-profile only. After a
-restore, pending reminders are cancelled and rebuilt from restored
-settings. Real-device notification QA is still required before release.
+- Format: versioned JSON (`backupVersion: 1`)
+- Full replace restore with confirmation
+- Notification reschedule after restore
 
 ## Release blockers
 
 ### NOTIFICATION REAL DEVICE QA (required before release)
 
-On a real Android device, verify permission, delivery with the app closed,
-reboot behavior, battery optimization, gesture / 3-button navigation, and
-notification appearance.
+Permission, delivery while closed, reboot, battery optimization, navigation
+modes, appearance.
+
+### BACKUP FULL MUTATION PROOF
+
+Deferred full device roundtrip remains part of final real-device QA.
+
+### BOTTOM SAFE-AREA AUDIT
+
+Real-device bottom inset audit remains later.
 
 ## Roadmap
 
-- P0 Foundation
-- P1 Onboarding + presets + basic calendar
-- P2 Custom cycle builder
-- P3 Calendar UX
-- P4 Day overrides / отпуск / больничный / переработка
-- P5 Today
-- P6 Statistics
-- P7 Salary
-- P8 Multiple schedules
-- P9 Notifications
-- P10 Backup / Restore
-- P11 Share / PDF
+- P0–P10: foundation → backup
+- P11 Calendar PDF share
 - P12 Widget
-- P13 Learning
+- P13 Learning polish
 - P14 UX polish / real-device bottom safe-area audit
 - P15 Ads + AppMetrica
 - P16 Release
 
 ## Out of scope for this phase
 
-Cloud sync, Google Drive auto-backup, encryption/password backups, exact
-alarms, alarm clock, secondary-profile notifications, FCM / push,
-Firebase, widget, PDF, ads, AppMetrica, production signing.
+Image export, payroll PDF, yearly/multi-month reports, cloud share, email
+sending, widget, ads, AppMetrica, production signing.
