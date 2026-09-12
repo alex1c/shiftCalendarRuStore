@@ -5,6 +5,7 @@
 import { Ionicons } from '@expo/vector-icons'
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs'
 
+import { useAds } from '@/src/ads'
 import { StatsScreen } from '@/src/screens/StatsScreen'
 import { TodayScreen } from '@/src/screens/TodayScreen'
 import { useTheme } from '@/src/theme'
@@ -16,6 +17,7 @@ const Tab = createBottomTabNavigator<MainTabParamList>()
 
 export function MainTabNavigator () {
 	const { colors } = useTheme()
+	const { recordInteraction } = useAds()
 
 	return (
 		<Tab.Navigator
@@ -34,6 +36,11 @@ export function MainTabNavigator () {
 				tabBarLabelStyle: {
 					fontSize: 12,
 					fontWeight: '600',
+				},
+			}}
+			screenListeners={{
+				tabPress: () => {
+					recordInteraction()
 				},
 			}}
 		>

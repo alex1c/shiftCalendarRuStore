@@ -35,6 +35,11 @@ import {
 	type ScheduleProfile,
 } from '@/src/domain'
 import {
+	ANALYTICS_EVENTS,
+	bucketProfileCount,
+	trackEvent,
+} from '@/src/analytics'
+import {
 	configureNotificationHandling,
 	rescheduleShiftNotifications,
 } from '@/src/notifications'
@@ -171,7 +176,10 @@ export function AppBootstrapProvider ({
 	const setActiveProfileId = useCallback(async (id: string) => {
 		await saveActiveProfileId(id)
 		setActiveId(id)
-	}, [])
+		trackEvent(ANALYTICS_EVENTS.profileSwitched, {
+			profile_count: bucketProfileCount(profiles.length),
+		})
+	}, [profiles.length])
 
 	const persistSchedule = useCallback(async (next: WorkSchedule) => {
 		if (!activeProfile) {
@@ -211,6 +219,16 @@ export function AppBootstrapProvider ({
 		await saveDayOverrides(nextOverrides)
 		if (activeProfile.isPrimary) {
 			queueReschedule(nextProfiles, notificationSettings)
+		}
+		// Privacy-safe: only override type enum, never dates or notes.
+		trackEvent(ANALYTICS_EVENTS.dayOverrideCreated, {
+			override_type: override.type,
+		})
+		if (override.type === 'vacation') {
+			trackEvent(ANALYTICS_EVENTS.vacationSet)
+		}
+		if (override.type === 'extraShift') {
+			trackEvent(ANALYTICS_EVENTS.extraShiftSet)
 		}
 	}, [
 		activeProfile,
@@ -288,10 +306,16 @@ export function AppBootstrapProvider ({
 				...next,
 				profileId: next.profileId ?? primaryProfile?.id ?? null,
 			}
+			const wasEnabled = salarySettings?.enabled === true
 			await saveSalarySettings(bound)
 			setSalarySettings(bound)
+			if (bound.enabled && !wasEnabled) {
+				trackEvent(ANALYTICS_EVENTS.salaryEnabled, {
+					feature_enabled: true,
+				})
+			}
 		},
-		[primaryProfile?.id],
+		[primaryProfile?.id, salarySettings?.enabled],
 	)
 
 	const persistNotificationSettings = useCallback(
@@ -325,6 +349,9 @@ export function AppBootstrapProvider ({
 		setSalarySettings(nextSalary)
 		setNotificationSettings(nextNotifications)
 		queueReschedule(nextProfiles, nextNotifications)
+		trackEvent(ANALYTICS_EVENTS.backupRestored, {
+			profile_count: bucketProfileCount(nextProfiles.length),
+		})
 	}, [queueReschedule])
 
 	useEffect(() => {

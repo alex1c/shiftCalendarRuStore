@@ -8,6 +8,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { SalarySettingsForm } from '@/src/components/SalarySettingsForm'
 import { Screen } from '@/src/components/Screen'
+import { useAdsProtectedFlow } from '@/src/ads'
 import type { SalarySettings } from '@/src/domain'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import type { MoreStackParamList } from '@/src/navigation/types'
@@ -20,6 +21,7 @@ export function SalarySettingsScreen ({ navigation }: Props) {
 		persistSalarySettings,
 		resetSalarySettings,
 	} = useAppBootstrap()
+	useAdsProtectedFlow()
 
 	const handleSave = (next: SalarySettings) => {
 		void (async () => {

@@ -7,6 +7,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { Screen } from '@/src/components/Screen'
 import { SecondaryLink, SurfaceCard } from '@/src/components/ui'
+import { BannerAdSlot } from '@/src/ads'
 import type { MoreStackParamList } from '@/src/navigation/types'
 import { spacing, typography, useTheme } from '@/src/theme'
 
@@ -52,6 +53,7 @@ export function MoreScreen ({ navigation }: Props) {
 					/>
 				</View>
 			</SurfaceCard>
+			<BannerAdSlot placement="more" />
 		</Screen>
 	)
 }

@@ -38,6 +38,9 @@
         }
       ],
       "expo-sharing"
-    ]
+    ],
+    "extra": {
+      "appMetricaApiKey": ""
+    }
   }
 }

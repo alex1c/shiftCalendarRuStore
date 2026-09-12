@@ -19,6 +19,11 @@ import {
 	requireSchedulePreset,
 	sanitizeScheduleName,
 } from '@/src/domain'
+import {
+	ANALYTICS_EVENTS,
+	bucketProfileCount,
+	trackEvent,
+} from '@/src/analytics'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
@@ -60,6 +65,18 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 				})
 			if (profiles.length === 0) {
 				await persistSchedule(schedule)
+				trackEvent(ANALYTICS_EVENTS.onboardingCompleted, {
+					schedule_type: isCustom ? 'custom' : 'preset',
+				})
+				trackEvent(ANALYTICS_EVENTS.profileCreated, {
+					profile_count: bucketProfileCount(1),
+					schedule_type: isCustom ? 'custom' : 'preset',
+				})
+				if (isCustom) {
+					trackEvent(ANALYTICS_EVENTS.customCycleCreated, {
+						schedule_type: 'custom',
+					})
+				}
 				navigation.getParent()?.dispatch(
 					CommonActions.reset({
 						index: 0,
@@ -68,6 +85,16 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 				)
 			} else {
 				await addProfile(profileOwnerName, schedule)
+				const nextCount = profiles.length + 1
+				trackEvent(ANALYTICS_EVENTS.profileCreated, {
+					profile_count: bucketProfileCount(nextCount),
+					schedule_type: isCustom ? 'custom' : 'preset',
+				})
+				if (isCustom) {
+					trackEvent(ANALYTICS_EVENTS.customCycleCreated, {
+						schedule_type: 'custom',
+					})
+				}
 				navigation.getParent()?.goBack()
 			}
 		} finally {

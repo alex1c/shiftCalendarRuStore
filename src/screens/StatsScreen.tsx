@@ -11,6 +11,11 @@ import { PeriodChips } from '@/src/components/PeriodChips'
 import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SecondaryLink, SurfaceCard } from '@/src/components/ui'
+import { BannerAdSlot, useAds } from '@/src/ads'
+import {
+	ANALYTICS_EVENTS,
+	trackEvent,
+} from '@/src/analytics'
 import {
 	computePeriodStats,
 	computeSalaryForPeriod,
@@ -37,13 +42,24 @@ export function StatsScreen () {
 		useNavigation<BottomTabNavigationProp<MainTabParamList, 'Stats'>>()
 	const { schedule, overrides, salarySettings, activeProfile, primaryProfile } =
 		useAppBootstrap()
+	const { recordInteraction, requestInterstitial } = useAds()
 	const [period, setPeriod] = useState<StatsPeriodKind>('30')
 	const [now, setNow] = useState(() => new Date())
 
 	useFocusEffect(
 		useCallback(() => {
 			setNow(new Date())
-		}, []),
+			trackEvent(ANALYTICS_EVENTS.statisticsViewed, {
+				period_type: period,
+			})
+			recordInteraction()
+			return () => {
+				// After the user leaves Statistics, consider a rare interstitial.
+				void requestInterstitial('statistics_viewed')
+			}
+			// period is read once on focus; changing chips should not re-fire leave hooks.
+			// eslint-disable-next-line react-hooks/exhaustive-deps
+		}, [recordInteraction, requestInterstitial]),
 	)
 
 	const range = useMemo(() => {
@@ -237,6 +253,8 @@ export function StatsScreen () {
 					))}
 				</SurfaceCard>
 			) : null}
+
+			<BannerAdSlot placement="statistics" />
 
 			<View style={styles.footer}>
 				<AppButton

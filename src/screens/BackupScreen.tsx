@@ -10,6 +10,11 @@ import { Alert, StyleSheet, Text, View } from 'react-native'
 
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
+import { useAdsProtectedFlow } from '@/src/ads'
+import {
+	ANALYTICS_EVENTS,
+	trackEvent,
+} from '@/src/analytics'
 import {
 	applyBackupRestore,
 	exportAndShareBackup,
@@ -33,6 +38,7 @@ export function BackupScreen () {
 		notificationSettings,
 		reloadAfterRestore,
 	} = useAppBootstrap()
+	useAdsProtectedFlow()
 	const [busy, setBusy] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [status, setStatus] = useState<string | null>(null)
@@ -64,6 +70,7 @@ export function BackupScreen () {
 				const exported = await exportAndShareBackup(payload)
 				setStatus(`Файл готов: ${exported.fileName}`)
 				setPending(null)
+				trackEvent(ANALYTICS_EVENTS.backupCreated)
 			} catch (err) {
 				console.warn('[backup] export failed', err)
 				setError('Не удалось создать резервную копию.')

@@ -72,3 +72,37 @@ jest.mock('expo-print', () => ({
 	})),
 	Orientation: { landscape: 'landscape', portrait: 'portrait' },
 }))
+
+jest.mock('yandex-mobile-ads', () => ({
+	MobileAds: {
+		pluginVersion: '8.4.0',
+		initialize: jest.fn(async () => undefined),
+		enableLogging: jest.fn(),
+		enableDebugErrorIndicator: jest.fn(),
+	},
+	BannerView: () => null,
+	BannerAdSize: {
+		stickySize: jest.fn(async () => ({ width: 320, height: 50 })),
+	},
+	InterstitialAdLoader: {
+		create: jest.fn(async () => ({
+			loadAd: jest.fn(async () => ({
+				show: jest.fn(async () => undefined),
+			})),
+		})),
+	},
+}))
+
+jest.mock('@appmetrica/react-native-analytics', () => ({
+	activateWithConfig: jest.fn(),
+	reportEvent: jest.fn(),
+}))
+
+jest.mock('expo-constants', () => ({
+	expoConfig: {
+		extra: {
+			appMetricaApiKey: '',
+		},
+	},
+}))
+

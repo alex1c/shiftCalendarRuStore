@@ -32,15 +32,16 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 11 — Calendar PDF sharing** is implemented.
+**Phase 12 — Ads + AppMetrica** is implemented.
 
-From the calendar header, users can share the **visible month** as a local
-PDF (single active profile or combined two-profile view). The PDF uses
-effective days (overrides included), a Monday-first grid, Russian labels,
-legend, month summary and optional common days off. Generation is
-`expo-print` HTML → PDF; delivery is the system share sheet.
+Yandex Mobile Ads (РСЯ) banners sit on Calendar, Statistics and More with
+safe-area padding and ForestMusic interstitial policy (max one per session,
+delayed start, protected flows). AppMetrica is wired with privacy-safe
+events; the API key is intentionally empty until a real key is supplied
+(`extra.appMetricaApiKey` / `EXPO_PUBLIC_APPMETRICA_API_KEY`). Rewarded ads
+are configured but not shown. Development builds use Yandex demo units.
 
-Image export is deferred.
+Phase 11 calendar PDF share remains available.
 
 ## Stack
 
@@ -53,6 +54,8 @@ Image export is deferred.
 - expo-notifications (local DATE triggers, not push / FCM)
 - expo-file-system / expo-sharing / expo-document-picker
 - expo-print (HTML → PDF)
+- yandex-mobile-ads (РСЯ)
+- @appmetrica/react-native-analytics (optional key)
 - Jest + ESLint
 - Android-first / RuStore
 
@@ -78,6 +81,8 @@ src/
   screens/        Onboarding, calendar, today, more, notifications, backup
   navigation/     Root stack, tabs, nested more stack
   domain/         Cycle engine, civil dates, salary, notifications, backup, export
+  ads/            Yandex Mobile Ads config, session policy, banners
+  analytics/      AppMetrica wrapper + privacy-safe events
   export/         Calendar PDF HTML + print/share service
   backup/         File export/import + restore orchestration
   notifications/  Native adapter (permissions, channel, schedule)
@@ -104,6 +109,17 @@ UI never walks dates to compute a shift. The cycle engine uses
 - Salary and day notes are not included
 - Image share: deferred
 
+## Ads + analytics
+
+- SDK: `yandex-mobile-ads` + `@appmetrica/react-native-analytics`
+- App ID: `e0b1b59c-bed2-4f4f-a8e3-b14603f56a32`
+- Banners: Calendar / Statistics / More (not Today above the fold)
+- Interstitial: max 1×/session, delayed start, blocked in protected flows
+- Rewarded: ID stored only; no Phase 12 UI
+- Dev mode: official Yandex demo units + logging
+- AppMetrica: no-op until a real API key is set (do not invent one)
+- Events never include salary amounts, notes, names, dates, or backup bodies
+
 ## Backup
 
 - Format: versioned JSON (`backupVersion: 1`)
@@ -127,15 +143,15 @@ Real-device bottom inset audit remains later.
 
 ## Roadmap
 
-- P0–P10: foundation → backup
-- P11 Calendar PDF share
-- P12 Widget
-- P13 Learning polish
-- P14 UX polish / real-device bottom safe-area audit
-- P15 Ads + AppMetrica
+- P0–P11: foundation → calendar PDF
+- P12 Ads + AppMetrica (this phase)
+- P13 Widget
+- P14 Learning polish
+- P15 UX polish / real-device bottom safe-area audit
 - P16 Release
 
 ## Out of scope for this phase
 
 Image export, payroll PDF, yearly/multi-month reports, cloud share, email
-sending, widget, ads, AppMetrica, production signing.
+sending, widget, rewarded ads without a reward UX, AdMob, Firebase,
+production signing, inventing an AppMetrica API key.

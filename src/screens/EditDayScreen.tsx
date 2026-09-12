@@ -11,6 +11,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 
 import { Screen } from '@/src/components/Screen'
 import { AppButton, AppTextField } from '@/src/components/ui'
+import { useAdsProtectedFlow } from '@/src/ads'
 import {
 	MAX_OVERRIDE_NOTE_LENGTH,
 	MAX_SHIFT_NAME_LENGTH,
@@ -59,6 +60,7 @@ export function EditDayScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
 	const { schedule, overrides, persistDayOverride, clearDayOverride } =
 		useAppBootstrap()
+	useAdsProtectedFlow()
 
 	const existing = overrides[date] ?? null
 	const effective = schedule

@@ -12,6 +12,11 @@ import { useFocusEffect } from '@react-navigation/native'
 
 import { Screen } from '@/src/components/Screen'
 import { AppButton, AppSwitchRow, AppTextField, SurfaceCard } from '@/src/components/ui'
+import { useAdsProtectedFlow } from '@/src/ads'
+import {
+	ANALYTICS_EVENTS,
+	trackEvent,
+} from '@/src/analytics'
 import {
 	DEFAULT_PRIMARY_PROFILE_NAME,
 	REMINDER_OFFSET_PRESETS,
@@ -65,6 +70,7 @@ export function NotificationsScreen () {
 		notificationSettings,
 		persistNotificationSettings,
 	} = useAppBootstrap()
+	useAdsProtectedFlow()
 	const initial = notificationSettings ?? defaultNotificationSettings()
 	const split = splitOffsets(initial.offsetsMinutes)
 	const customSeed = split.customMinutes
@@ -200,6 +206,11 @@ export function NotificationsScreen () {
 					offsetsMinutes: offsets,
 					updatedAt: new Date().toISOString(),
 				})
+				if (nextEnabled) {
+					trackEvent(ANALYTICS_EVENTS.notificationEnabled, {
+						feature_enabled: true,
+					})
+				}
 				setError(null)
 			} catch {
 				setError('Не удалось сохранить настройки уведомлений.')

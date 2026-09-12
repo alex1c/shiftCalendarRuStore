@@ -13,6 +13,11 @@ import { MonthCalendar } from '@/src/components/MonthCalendar'
 import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { SurfaceCard } from '@/src/components/ui'
+import { BannerAdSlot, useAds, useAdsProtectionFlag } from '@/src/ads'
+import {
+	ANALYTICS_EVENTS,
+	trackEvent,
+} from '@/src/analytics'
 import {
 	addMonths,
 	buildMonthGrid,
@@ -48,6 +53,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	const { colors } = useTheme()
 	const { schedule, overrides, clearDayOverride, profiles, activeProfile } =
 		useAppBootstrap()
+	const { recordInteraction, requestInterstitial } = useAds()
 	const today = todayCalendarDate()
 	const todayParts = parseCalendarDate(today)
 
@@ -59,6 +65,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	const [combined, setCombined] = useState(false)
 	const [peerId, setPeerId] = useState<string | null>(null)
 	const [sharingPdf, setSharingPdf] = useState(false)
+	useAdsProtectionFlag(sharingPdf)
 
 	const handleSelectDate = useCallback((date: string) => {
 		const parts = parseCalendarDate(date)
@@ -229,6 +236,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 		}
 		setSharingPdf(true)
 		void (async () => {
+			let shared = false
 			try {
 				const secondary =
 					showCombined && peerProfile ? peerProfile : null
@@ -239,6 +247,9 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					secondary,
 					combined: secondary != null,
 				})
+				shared = true
+				trackEvent(ANALYTICS_EVENTS.pdfShared)
+				recordInteraction()
 			} catch (error) {
 				const message =
 					error instanceof Error && error.message === 'SHARE_UNAVAILABLE'
@@ -248,10 +259,18 @@ export function CalendarScreen ({ navigation, route }: Props) {
 			} finally {
 				setSharingPdf(false)
 			}
+			if (shared) {
+				// Wait until the PDF protection flag clears before evaluating policy.
+				setTimeout(() => {
+					void requestInterstitial('pdf_shared')
+				}, 500)
+			}
 		})()
 	}, [
 		activeProfile,
 		peerProfile,
+		recordInteraction,
+		requestInterstitial,
 		sharingPdf,
 		showCombined,
 		visible.month,
@@ -555,6 +574,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					</Text>
 				) : null}
 			</View>
+			<BannerAdSlot placement="calendar" />
 		</Screen>
 	)
 }

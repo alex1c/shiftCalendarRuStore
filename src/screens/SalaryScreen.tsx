@@ -11,6 +11,7 @@ import { PeriodChips } from '@/src/components/PeriodChips'
 import { SalarySettingsForm } from '@/src/components/SalarySettingsForm'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
+import { useAdsProtectedFlow } from '@/src/ads'
 import {
 	computeSalaryForPeriod,
 	formatRublesDeltaFromMinor,
@@ -37,6 +38,7 @@ export function SalaryScreen ({ navigation }: Props) {
 		primaryProfile,
 		activeProfile,
 	} = useAppBootstrap()
+	useAdsProtectedFlow()
 	const [period, setPeriod] = useState<StatsPeriodKind>('30')
 	const [now, setNow] = useState(() => new Date())
 
