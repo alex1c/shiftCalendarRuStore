@@ -104,7 +104,7 @@ export function BannerAdSlot ({
 		>
 			<BannerView
 				size={adSize}
-				adUnitId={resolveBannerUnitId(placement)}
+				adRequest={{ adUnitId: resolveBannerUnitId(placement) }}
 				onAdLoaded={() => {
 					setLoaded(true)
 				}}

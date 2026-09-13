@@ -14,7 +14,7 @@ export type YandexAdsBridge = {
 	}
 	BannerView: ComponentType<{
 		size: unknown
-		adUnitId: string
+		adRequest: { adUnitId: string }
 		onAdLoaded?: () => void
 		onAdFailedToLoad?: (event: unknown) => void
 		onAdClicked?: () => void
