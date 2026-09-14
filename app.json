@@ -37,7 +37,8 @@
           "backgroundColor": "#F4F1EA"
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withAppMetricaAutolinking"
     ],
     "extra": {
       "appMetricaApiKey": "e0b1b59c-bed2-4f4f-a8e3-b14603f56a32"
