@@ -29,6 +29,7 @@
     "yandex-mobile-ads": "^8.4.0"
   },
   "devDependencies": {
+    "@react-native-community/cli": "^20.0.2",
     "@types/jest": "^29.5.14",
     "@types/react": "~19.2.2",
     "eslint": "^9.39.5",

@@ -37,8 +37,8 @@ Do not put machine-specific paths into runtime application code.
 Yandex Mobile Ads (РСЯ) banners sit on Calendar, Statistics and More with
 safe-area padding and ForestMusic interstitial policy (max one per session,
 delayed start, protected flows). AppMetrica is wired with privacy-safe
-events; the API key is intentionally empty until a real key is supplied
-(`extra.appMetricaApiKey` / `EXPO_PUBLIC_APPMETRICA_API_KEY`). Rewarded ads
+events and configured through `extra.appMetricaApiKey`.
+Rewarded ads
 are configured but not shown. Development builds use Yandex demo units.
 
 Phase 11 calendar PDF share remains available.
@@ -112,12 +112,12 @@ UI never walks dates to compute a shift. The cycle engine uses
 ## Ads + analytics
 
 - SDK: `yandex-mobile-ads` + `@appmetrica/react-native-analytics`
-- App ID: `e0b1b59c-bed2-4f4f-a8e3-b14603f56a32`
+- AppMetrica application ID: `6355141`
 - Banners: Calendar / Statistics / More (not Today above the fold)
 - Interstitial: max 1×/session, delayed start, blocked in protected flows
 - Rewarded: ID stored only; no Phase 12 UI
 - Dev mode: official Yandex demo units + logging
-- AppMetrica: no-op until a real API key is set (do not invent one)
+- AppMetrica: configured through the project extra config
 - Events never include salary amounts, notes, names, dates, or backup bodies
 
 ## Backup
