@@ -6,6 +6,7 @@
 import {
 	PDF_OVERRIDE_LEGEND,
 	PDF_OVERRIDE_MARKER,
+	RUSTORE_APP_URL,
 	escapeHtml,
 	type CalendarExportCell,
 	type CalendarExportModel,
@@ -52,6 +53,15 @@ function renderCell (cell: CalendarExportCell, combined: boolean): string {
 	)
 }
 
+const PDF_FOOTER_LABEL = 'График составлен в приложении «Мой график смен» • RuStore'
+
+export function buildPdfFooter (url: string | null = RUSTORE_APP_URL): string {
+	const label = escapeHtml(PDF_FOOTER_LABEL)
+	return url
+		? `<a href="${escapeHtml(url)}">${label}</a>`
+		: label
+}
+
 /**
  * Build a self-contained HTML document for expo-print.
  * Uses system-safe font stacks — no remote web fonts.
@@ -94,6 +104,7 @@ export function buildCalendarPdfHtml (model: CalendarExportModel): string {
 				`</span>`,
 		)
 		.join('')
+	const footer = buildPdfFooter()
 
 	const commonBlock =
 		combined && model.commonOffCount > 0
@@ -221,6 +232,15 @@ export function buildCalendarPdfHtml (model: CalendarExportModel): string {
     margin-top: 2px;
     color: #5c564e;
   }
+  .app-footer {
+    margin-top: 8px;
+    padding-top: 5px;
+    border-top: 1px solid #e4ddd2;
+    color: #706960;
+    font-size: 9px;
+    text-align: center;
+  }
+  .app-footer a { color: inherit; }
 </style>
 </head>
 <body>
@@ -242,6 +262,7 @@ export function buildCalendarPdfHtml (model: CalendarExportModel): string {
       </div>
       <div class="summary">${summaryItems}</div>
       ${commonBlock}
+      <div class="app-footer">${footer}</div>
     </div>
   </div>
 </body>

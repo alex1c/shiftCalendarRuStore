@@ -30,6 +30,8 @@ import {
 export const PDF_APP_TITLE = 'Мой график смен'
 export const PDF_OVERRIDE_MARKER = '*'
 export const PDF_OVERRIDE_LEGEND = '* — изменено вручную'
+/** Reserved for the published RuStore listing; keep null until the URL exists. */
+export const RUSTORE_APP_URL: string | null = null
 
 export type CalendarExportMode = 'single' | 'combined'
 

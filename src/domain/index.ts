@@ -268,6 +268,7 @@ export {
 	PDF_APP_TITLE,
 	PDF_OVERRIDE_LEGEND,
 	PDF_OVERRIDE_MARKER,
+	RUSTORE_APP_URL,
 	buildCalendarPdfFileName,
 	buildMonthExportModel,
 	collectInMonthShortNames,

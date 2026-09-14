@@ -2,7 +2,7 @@
  * Public calendar export adapters.
  */
 
-export { buildCalendarPdfHtml } from './buildCalendarPdfHtml'
+export { buildCalendarPdfHtml, buildPdfFooter } from './buildCalendarPdfHtml'
 export {
 	createAndShareCalendarPdf,
 	createCalendarPdf,

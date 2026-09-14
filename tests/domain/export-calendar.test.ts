@@ -16,7 +16,7 @@ import {
 	type DayOverride,
 	type DayOverrideInput,
 } from '@/src/domain'
-import { buildCalendarPdfHtml } from '@/src/export'
+import { buildCalendarPdfHtml, buildPdfFooter } from '@/src/export'
 
 const STAMP = new Date('2026-09-01T12:00:00.000Z')
 
@@ -275,5 +275,13 @@ describe('buildCalendarPdfHtml', () => {
 		expect(html).toContain('Сентябрь 2026')
 		expect(html).toContain('Пн')
 		expect(html).toContain('@page { size: A4 landscape;')
+		expect(html).toContain('График составлен в приложении «Мой график смен» • RuStore')
+		expect(html).toContain('class="app-footer"')
+	})
+
+	it('renders and escapes a future RuStore URL when configured', () => {
+		expect(buildPdfFooter('https://example.test/app?a=1&b=<x>')).toBe(
+			'<a href="https://example.test/app?a=1&amp;b=&lt;x&gt;">График составлен в приложении «Мой график смен» • RuStore</a>',
+		)
 	})
 })
