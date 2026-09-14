@@ -4,6 +4,7 @@
 
 import type { ReactNode } from 'react'
 import {
+	Platform,
 	ScrollView,
 	StyleSheet,
 	View,
@@ -32,10 +33,15 @@ export function Screen ({
 }: ScreenProps) {
 	const insets = useSafeAreaInsets()
 	const { colors } = useTheme()
+	// On Android 15+ edge-to-edge gesture navigation can report a zero
+	// navigation-bar inset while the translucent system surface still covers
+	// the bottom of the window. Keep owned scroll content comfortably clear of
+	// that surface without changing tab screens that delegate it to the tab bar.
+	const bottomSafeBuffer = Platform.OS === 'android' ? spacing.xl : 0
 	const padding = {
 		paddingTop: insets.top + spacing.md,
 		paddingBottom: includeBottomSafeArea
-			? insets.bottom + spacing.lg
+			? Math.max(insets.bottom, bottomSafeBuffer) + spacing.lg
 			: spacing.md,
 		paddingHorizontal: spacing.lg,
 	}
