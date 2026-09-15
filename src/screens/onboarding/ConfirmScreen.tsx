@@ -5,7 +5,6 @@
 import { useState } from 'react'
 import { Alert, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import { CommonActions } from '@react-navigation/native'
 
 import { CycleChips } from '@/src/components/CycleChips'
 import { Screen } from '@/src/components/Screen'
@@ -32,6 +31,7 @@ import {
 } from '@/src/learning'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
+import { getConfirmCompletionNavigation } from './confirmNavigation'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
 import { spacing, typography, useTheme } from '@/src/theme'
 
@@ -83,24 +83,16 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 						schedule_type: 'custom',
 					})
 				}
-				const goMain = () => {
-					navigation.getParent()?.dispatch(
-						CommonActions.reset({
-							index: 0,
-							routes: [{ name: 'Main' }],
-						}),
-					)
-				}
+				// RootNavigator switches to Main from the persisted bootstrap state.
+				// Do not dispatch from an Alert callback after that navigator remounts.
 				if (await shouldShowLearningTip()) {
 					await markLearningTipShown()
 					Alert.alert(
 						'Готово',
 						'Другие возможности всегда доступны в «Ещё» → «Обучение».',
-						[{ text: 'Понятно', onPress: goMain }],
+						[{ text: 'Понятно' }],
 						{ cancelable: false },
 					)
-				} else {
-					goMain()
 				}
 			} else {
 				await addProfile(profileOwnerName, schedule)
@@ -114,7 +106,9 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 						schedule_type: 'custom',
 					})
 				}
-				const leave = () => {
+				// Leave AddProfile immediately, before any native hint is shown.
+				// The hint callback must not dispatch against a stale navigator.
+				if (getConfirmCompletionNavigation(profiles.length) === 'parent-back') {
 					navigation.getParent()?.goBack()
 				}
 				if (nextCount === 2 && (await shouldShowCombinedHint())) {
@@ -124,18 +118,11 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 						[
 							{
 								text: 'Понятно',
-								onPress: () => {
-									void (async () => {
-										await dismissCombinedHint()
-										leave()
-									})()
-								},
+								onPress: () => { void dismissCombinedHint() },
 							},
 						],
 						{ cancelable: false },
 					)
-				} else {
-					leave()
 				}
 			}
 		} finally {
