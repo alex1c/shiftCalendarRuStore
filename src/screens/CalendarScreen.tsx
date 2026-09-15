@@ -19,6 +19,11 @@ import {
 	trackEvent,
 } from '@/src/analytics'
 import {
+	DiscoveryHintModal,
+	dismissShareHint,
+	recordCalendarVisitForShareHint,
+} from '@/src/learning'
+import {
 	addMonths,
 	buildMonthGrid,
 	commonDaysOffInMonth,
@@ -65,6 +70,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	const [combined, setCombined] = useState(false)
 	const [peerId, setPeerId] = useState<string | null>(null)
 	const [sharingPdf, setSharingPdf] = useState(false)
+	const [shareHintVisible, setShareHintVisible] = useState(false)
 	useAdsProtectionFlag(sharingPdf)
 
 	const handleSelectDate = useCallback((date: string) => {
@@ -81,13 +87,27 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	useFocusEffect(
 		useCallback(() => {
 			const focusDate = route.params?.focusDate
-			if (!focusDate) {
-				return
+			if (focusDate) {
+				handleSelectDate(focusDate)
+				navigation.setParams({ focusDate: undefined })
 			}
-			handleSelectDate(focusDate)
-			navigation.setParams({ focusDate: undefined })
+			let cancelled = false
+			void (async () => {
+				const result = await recordCalendarVisitForShareHint()
+				if (!cancelled && result.shouldShowShareHint) {
+					setShareHintVisible(true)
+				}
+			})()
+			return () => {
+				cancelled = true
+			}
 		}, [handleSelectDate, navigation, route.params?.focusDate]),
 	)
+
+	const handleDismissShareHint = useCallback(() => {
+		setShareHintVisible(false)
+		void dismissShareHint()
+	}, [])
 
 	const cells = useMemo(
 		() => buildMonthGrid(visible.year, visible.month),
@@ -304,6 +324,12 @@ export function CalendarScreen ({ navigation, route }: Props) {
 
 	return (
 		<Screen includeBottomSafeArea={false}>
+			<DiscoveryHintModal
+				visible={shareHintVisible}
+				title="Поделитесь графиком"
+				body={'Откройте нужный месяц и нажмите «Поделиться», чтобы сохранить или отправить PDF.'}
+				onDismiss={handleDismissShareHint}
+			/>
 			<View style={styles.switcherRow}>
 				<ProfileSwitcher />
 			</View>
@@ -324,46 +350,76 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					accessibilityLabel="Следующий месяц"
 					onPress={() => goToMonth(1)}
 				/>
-				<HeaderIconButton
-					icon="share-outline"
-					accessibilityLabel="Поделиться"
-					disabled={sharingPdf}
-					onPress={handleSharePress}
-				/>
 			</View>
 			{sharingPdf ? (
 				<Text style={[styles.sharingHint, { color: colors.textSecondary }]}>
 					Создаём PDF…
 				</Text>
 			) : null}
-			<Pressable
-				accessibilityRole="button"
-				accessibilityLabel="Вернуться к текущему месяцу"
-				disabled={isCurrentMonth && selectedDate === today}
-				onPress={handleSelectToday}
-				style={({ pressed }) => [
-					styles.todayButton,
-					{
-						backgroundColor: colors.surface,
-						borderColor: colors.border,
-						opacity:
-							isCurrentMonth && selectedDate === today
-								? 0.45
-								: pressed
-									? 0.85
-									: 1,
-					},
-				]}
-			>
-				<Text style={[styles.todayButtonLabel, { color: colors.primary }]}>
-					Сегодня
-				</Text>
-			</Pressable>
+			<View style={styles.actionRow}>
+				<Pressable
+					accessibilityRole="button"
+					accessibilityLabel="Вернуться к текущему месяцу"
+					disabled={isCurrentMonth && selectedDate === today}
+					onPress={handleSelectToday}
+					style={({ pressed }) => [
+						styles.actionButton,
+						{
+							backgroundColor: colors.surface,
+							borderColor: colors.border,
+							opacity:
+								isCurrentMonth && selectedDate === today
+									? 0.45
+									: pressed
+										? 0.85
+										: 1,
+						},
+					]}
+				>
+					<Text
+						style={[
+							styles.actionButtonLabel,
+							{ color: colors.primary },
+						]}
+					>
+						Сегодня
+					</Text>
+				</Pressable>
+				<Pressable
+					accessibilityRole="button"
+					accessibilityLabel="Поделиться графиком PDF"
+					disabled={sharingPdf}
+					onPress={handleSharePress}
+					style={({ pressed }) => [
+						styles.actionButton,
+						{
+							backgroundColor: colors.surface,
+							borderColor: colors.border,
+							opacity: sharingPdf ? 0.45 : pressed ? 0.85 : 1,
+						},
+					]}
+				>
+					<Ionicons
+						name="share-outline"
+						size={18}
+						color={colors.primary}
+					/>
+					<Text
+						style={[
+							styles.actionButtonLabel,
+							{ color: colors.primary },
+						]}
+					>
+						Поделиться
+					</Text>
+				</Pressable>
+			</View>
 
 			{peers.length > 0 ? (
 				<View style={styles.modeRow}>
 					<Pressable
 						accessibilityRole="button"
+						accessibilityLabel={`График: ${activeProfile?.name ?? 'Я'}`}
 						accessibilityState={{ selected: !combined }}
 						onPress={() => setCombined(false)}
 						style={({ pressed }) => [
@@ -394,6 +450,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					</Pressable>
 					<Pressable
 						accessibilityRole="button"
+						accessibilityLabel="Совместный календарь"
 						accessibilityState={{ selected: combined }}
 						onPress={() => setCombined(true)}
 						style={({ pressed }) => [
@@ -409,18 +466,29 @@ export function CalendarScreen ({ navigation, route }: Props) {
 							},
 						]}
 					>
-						<Text
-							style={[
-								styles.modeLabel,
-								{
-									color: combined
+						<View style={styles.modeChipInner}>
+							<Ionicons
+								name="people-outline"
+								size={18}
+								color={
+									combined
 										? colors.primary
-										: colors.textPrimary,
-								},
-							]}
-						>
-							Совместный
-						</Text>
+										: colors.textPrimary
+								}
+							/>
+							<Text
+								style={[
+									styles.modeLabel,
+									{
+										color: combined
+											? colors.primary
+											: colors.textPrimary,
+									},
+								]}
+							>
+								Совместный
+							</Text>
+						</View>
 					</Pressable>
 				</View>
 			) : null}
@@ -580,7 +648,7 @@ export function CalendarScreen ({ navigation, route }: Props) {
 }
 
 type HeaderIconButtonProps = {
-	icon: 'chevron-back' | 'chevron-forward' | 'share-outline'
+	icon: 'chevron-back' | 'chevron-forward'
 	accessibilityLabel: string
 	onPress: () => void
 	disabled?: boolean
@@ -637,15 +705,23 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	todayButton: {
+	actionRow: {
+		flexDirection: 'row',
+		gap: spacing.xs,
+		marginBottom: spacing.sm,
+	},
+	actionButton: {
+		flex: 1,
 		minHeight: touchTarget.min,
 		borderRadius: radius.md,
 		borderWidth: 1,
 		alignItems: 'center',
 		justifyContent: 'center',
-		marginBottom: spacing.sm,
+		flexDirection: 'row',
+		gap: spacing.xxs,
+		paddingHorizontal: spacing.sm,
 	},
-	todayButtonLabel: {
+	actionButtonLabel: {
 		...typography.bodyStrong,
 	},
 	sharingHint: {
@@ -667,7 +743,23 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
+	modeChipInner: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: spacing.xxs,
+	},
 	modeLabel: {
+		...typography.bodyStrong,
+	},
+	todayButton: {
+		minHeight: touchTarget.min,
+		borderRadius: radius.md,
+		borderWidth: 1,
+		alignItems: 'center',
+		justifyContent: 'center',
+		marginBottom: spacing.sm,
+	},
+	todayButtonLabel: {
 		...typography.bodyStrong,
 	},
 	legend: {

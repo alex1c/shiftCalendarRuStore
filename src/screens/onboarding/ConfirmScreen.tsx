@@ -3,7 +3,7 @@
  */
 
 import { useState } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Alert, StyleSheet, Text, View } from 'react-native'
 import type { NativeStackScreenProps } from '@react-navigation/native-stack'
 import { CommonActions } from '@react-navigation/native'
 
@@ -24,6 +24,12 @@ import {
 	bucketProfileCount,
 	trackEvent,
 } from '@/src/analytics'
+import {
+	dismissCombinedHint,
+	markLearningTipShown,
+	shouldShowCombinedHint,
+	shouldShowLearningTip,
+} from '@/src/learning'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
 import { useOnboardingDraft } from '@/src/features/onboarding/OnboardingDraft'
 import type { OnboardingStackParamList } from '@/src/navigation/types'
@@ -77,12 +83,25 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 						schedule_type: 'custom',
 					})
 				}
-				navigation.getParent()?.dispatch(
-					CommonActions.reset({
-						index: 0,
-						routes: [{ name: 'Main' }],
-					}),
-				)
+				const goMain = () => {
+					navigation.getParent()?.dispatch(
+						CommonActions.reset({
+							index: 0,
+							routes: [{ name: 'Main' }],
+						}),
+					)
+				}
+				if (await shouldShowLearningTip()) {
+					await markLearningTipShown()
+					Alert.alert(
+						'Готово',
+						'Другие возможности всегда доступны в «Ещё» → «Обучение».',
+						[{ text: 'Понятно', onPress: goMain }],
+						{ cancelable: false },
+					)
+				} else {
+					goMain()
+				}
 			} else {
 				await addProfile(profileOwnerName, schedule)
 				const nextCount = profiles.length + 1
@@ -95,7 +114,29 @@ export function ConfirmScreen ({ navigation, route }: Props) {
 						schedule_type: 'custom',
 					})
 				}
-				navigation.getParent()?.goBack()
+				const leave = () => {
+					navigation.getParent()?.goBack()
+				}
+				if (nextCount === 2 && (await shouldShowCombinedHint())) {
+					Alert.alert(
+						'Сравните ваши графики',
+						'Откройте «Календарь» → «Совместный», чтобы увидеть смены вместе и найти общие выходные.',
+						[
+							{
+								text: 'Понятно',
+								onPress: () => {
+									void (async () => {
+										await dismissCombinedHint()
+										leave()
+									})()
+								},
+							},
+						],
+						{ cancelable: false },
+					)
+				} else {
+					leave()
+				}
 			}
 		} finally {
 			setSaving(false)

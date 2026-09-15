@@ -32,16 +32,15 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Phase 12 — Ads + AppMetrica** is implemented.
+**Release polish — обучение и discoverability** is implemented.
 
-Yandex Mobile Ads (РСЯ) banners sit on Calendar, Statistics and More with
-safe-area padding and ForestMusic interstitial policy (max one per session,
-delayed start, protected flows). AppMetrica is wired with privacy-safe
-events and configured through `extra.appMetricaApiKey`.
-Rewarded ads
-are configured but not shown. Development builds use Yandex demo units.
+«Ещё → Обучение» is a full scrollable in-app guide (график, календарь,
+ручные дни, графики семьи, совместный календарь, PDF, сегодня, статистика,
+зарплата, уведомления, резервная копия). Calendar share is a labeled
+«Поделиться» action; «Совместный» uses an icon+label chip. One-shot hints
+cover the second profile and delayed share discoverability.
 
-Phase 11 calendar PDF share remains available.
+Phase 12 Ads + AppMetrica remain available.
 
 ## Stack
 
@@ -81,6 +80,7 @@ src/
   screens/        Onboarding, calendar, today, more, notifications, backup
   navigation/     Root stack, tabs, nested more stack
   domain/         Cycle engine, civil dates, salary, notifications, backup, export
+  learning/      In-app tutorial catalogue + discovery hints
   ads/            Yandex Mobile Ads config, session policy, banners
   analytics/      AppMetrica wrapper + privacy-safe events
   export/         Calendar PDF HTML + print/share service
@@ -128,30 +128,18 @@ UI never walks dates to compute a shift. The cycle engine uses
 
 ## Release blockers
 
-### NOTIFICATION REAL DEVICE QA (required before release)
-
-Permission, delivery while closed, reboot, battery optimization, navigation
-modes, appearance.
-
-### BACKUP FULL MUTATION PROOF
-
-Deferred full device roundtrip remains part of final real-device QA.
-
-### BOTTOM SAFE-AREA AUDIT
-
-Real-device bottom inset audit remains later.
+Real-device QA on OPPO already passed (safe area, notifications, backup,
+PDF, AppMetrica, ads). Remaining before store: RuStore assets / privacy
+copy / release signing.
 
 ## Roadmap
 
-- P0–P11: foundation → calendar PDF
-- P12 Ads + AppMetrica (this phase)
-- P13 Widget
-- P14 Learning polish
-- P15 UX polish / real-device bottom safe-area audit
-- P16 Release
+- P0–P12: foundation → ads/analytics
+- Release polish: обучение + discoverability (this phase)
+- Next: RuStore assets / privacy / release prep
+- Deferred: widget, image export, cloud sync
 
 ## Out of scope for this phase
 
-Image export, payroll PDF, yearly/multi-month reports, cloud share, email
-sending, widget, rewarded ads without a reward UX, AdMob, Firebase,
-production signing, inventing an AppMetrica API key.
+Image export, widget, cloud sync, range vacation editor, production
+signing, new large product features.
