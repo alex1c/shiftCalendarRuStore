@@ -4,7 +4,7 @@
     "slug": "shift-calendar",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon_gpt.png",
     "scheme": "shiftcalendar",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -14,16 +14,15 @@
     "android": {
       "package": "com.calculatorplatform.shiftcalendar",
       "versionCode": 1,
+      "icon": "./assets/icon_gpt.png",
       "adaptiveIcon": {
-        "backgroundColor": "#F4F1EA",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#1D98FE",
+        "foregroundImage": "./assets/icon-adaptive-foreground.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon_gpt.png"
     },
     "plugins": [
       "@react-native-community/datetimepicker",
@@ -41,7 +40,12 @@
       "./plugins/withAppMetricaAutolinking"
     ],
     "extra": {
-      "appMetricaApiKey": "e0b1b59c-bed2-4f4f-a8e3-b14603f56a32"
+      "appMetricaApiKey": "e0b1b59c-bed2-4f4f-a8e3-b14603f56a32",
+      "appMetricaApplicationId": "6355141",
+      "developerName": "ForestMusic",
+      "developerSite": "https://forest-music.ru",
+      "developerContact": "rustore-alex1c@yandex.ru",
+      "privacyPolicyUrl": "https://alex1c.github.io/shiftCalendarRuStore/privacy.html"
     }
   }
 }

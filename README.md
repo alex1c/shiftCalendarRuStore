@@ -3,9 +3,9 @@
 Офлайн-календарь рабочих графиков для Android / RuStore (ForestMusic).
 
 Приложение помогает сразу видеть, рабочий выбранный день или выходной,
-по повторяющемуся циклу смен — без облака, аккаунта и рекламы.
+по повторяющемуся циклу смен — без облака и аккаунта.
 
-Internal name: **Shift Calendar**
+Internal engineering name: **shift-calendar** (not shown in store UI).
 
 ## Repository
 
@@ -18,6 +18,8 @@ Internal name: **Shift Calendar**
 | Android package | `com.calculatorplatform.shiftcalendar` |
 | Display name | Мой график смен |
 | Version | `1.0.0` (versionCode `1`) |
+| Developer | ForestMusic · https://forest-music.ru |
+| Contact | rustore-alex1c@yandex.ru |
 
 **GitHub is the source of truth.** Sync both machines through `origin/main`.
 
@@ -32,15 +34,17 @@ Do not put machine-specific paths into runtime application code.
 
 ## Current status
 
-**Release polish — обучение и discoverability** is implemented.
+**Phase 15 — RuStore assets / privacy / icon / release metadata prep.**
 
-«Ещё → Обучение» is a full scrollable in-app guide (график, календарь,
-ручные дни, графики семьи, совместный календарь, PDF, сегодня, статистика,
-зарплата, уведомления, резервная копия). Calendar share is a labeled
-«Поделиться» action; «Совместный» uses an icon+label chip. One-shot hints
-cover the second profile and delayed share discoverability.
+- Master icon: `assets/icon_gpt.png` (official release asset)
+- Privacy page prepared: `docs/privacy.html`
+- RuStore listing texts: `docs/rustore-listing.md`
+- Screenshot plan: `docs/SCREENSHOT_PLAN.md`
+- Release checklist: `docs/RELEASE_CHECKLIST.md`
 
-Phase 12 Ads + AppMetrica remain available.
+Expected privacy URL (Pages):  
+https://alex1c.github.io/shiftCalendarRuStore/privacy.html  
+Status: **PREPARED** (not verified live in this phase).
 
 ## Stack
 
@@ -54,7 +58,7 @@ Phase 12 Ads + AppMetrica remain available.
 - expo-file-system / expo-sharing / expo-document-picker
 - expo-print (HTML → PDF)
 - yandex-mobile-ads (РСЯ)
-- @appmetrica/react-native-analytics (optional key)
+- @appmetrica/react-native-analytics
 - Jest + ESLint
 - Android-first / RuStore
 
@@ -80,7 +84,7 @@ src/
   screens/        Onboarding, calendar, today, more, notifications, backup
   navigation/     Root stack, tabs, nested more stack
   domain/         Cycle engine, civil dates, salary, notifications, backup, export
-  learning/      In-app tutorial catalogue + discovery hints
+  learning/       In-app tutorial catalogue + discovery hints
   ads/            Yandex Mobile Ads config, session policy, banners
   analytics/      AppMetrica wrapper + privacy-safe events
   export/         Calendar PDF HTML + print/share service
@@ -91,34 +95,41 @@ src/
   utils/          Ids
   types/          Domain model types
   features/       App bootstrap / persisted schedule
+docs/
+  privacy.html           Privacy policy (GitHub Pages)
+  index.html             App landing for Pages
+  rustore-listing.md     Short/full/what's new texts
+  SCREENSHOT_PLAN.md     1080×1920 frame plan
+  RELEASE_CHECKLIST.md   Release gate checklist
 ```
 
 UI never walks dates to compute a shift. The cycle engine uses
 `day difference + positive modulo` on `YYYY-MM-DD` civil dates.
 
-## Calendar PDF
+## Icon
 
-- Entry: Calendar header share → PDF
-- Page: A4 landscape, light document theme
-- Data: effective days for the visible month only
-- Modes: single active profile, or combined (max 2)
-- Filename examples:
-  - `Moi_grafik_smen_2026-09.pdf`
-  - `Moi_grafik_smen_marina_2026-09.pdf`
-  - `Moi_grafik_smen_combined_ya_marina_2026-09.pdf`
-- Salary and day notes are not included
-- Image share: deferred
+- Master: `assets/icon_gpt.png` (1254×1254)
+- Expo / Android icon: master path
+- Adaptive foreground: `assets/icon-adaptive-foreground.png`
+  (master with exterior near-black fill replaced by brand blue `#1D98FE`
+  to reduce double-mask gaps; artwork itself is not redrawn)
+- Adaptive backgroundColor: `#1D98FE`
 
 ## Ads + analytics
 
 - SDK: `yandex-mobile-ads` + `@appmetrica/react-native-analytics`
-- AppMetrica application ID: `6355141`
-- Banners: Calendar / Statistics / More (not Today above the fold)
+- AppMetrica application id: `6355141` (API key in `app.json` extra; not published in privacy text)
+- Banners: Calendar / Statistics / More
 - Interstitial: max 1×/session, delayed start, blocked in protected flows
-- Rewarded: ID stored only; no Phase 12 UI
-- Dev mode: official Yandex demo units + logging
-- AppMetrica: configured through the project extra config
+- Rewarded: ID stored only; not shown in UI
 - Events never include salary amounts, notes, names, dates, or backup bodies
+
+## Calendar PDF
+
+- Entry: Calendar → Поделиться → PDF
+- Page: A4 landscape
+- Footer: «Мой график смен» • RuStore (`RUSTORE_APP_URL` still null)
+- Image share: deferred
 
 ## Backup
 
@@ -126,20 +137,18 @@ UI never walks dates to compute a shift. The cycle engine uses
 - Full replace restore with confirmation
 - Notification reschedule after restore
 
-## Release blockers
+## Release prep
 
-Real-device QA on OPPO already passed (safe area, notifications, backup,
-PDF, AppMetrica, ads). Remaining before store: RuStore assets / privacy
-copy / release signing.
+See `docs/RELEASE_CHECKLIST.md`. Production signing and AAB are local-only
+and are not performed in this Cursor phase.
 
-## Roadmap
+## Deferred 1.1
 
-- P0–P12: foundation → ads/analytics
-- Release polish: обучение + discoverability (this phase)
-- Next: RuStore assets / privacy / release prep
-- Deferred: widget, image export, cloud sync
+- Widget
+- Image export
+- Cloud sync
 
 ## Out of scope for this phase
 
-Image export, widget, cloud sync, range vacation editor, production
-signing, new large product features.
+Production signing, production keystore/password invention, production AAB,
+widget, image export, cloud sync, new product features.
