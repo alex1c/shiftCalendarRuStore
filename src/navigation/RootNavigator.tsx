@@ -19,7 +19,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>()
 
 export function RootNavigator () {
 	const { colors, scheme } = useTheme()
-	const { schedule } = useAppBootstrap()
+	const { ready, profiles, schedule } = useAppBootstrap()
 	const hasSchedule = schedule != null
 
 	const navTheme = {
@@ -35,9 +35,11 @@ export function RootNavigator () {
 	}
 
 	return (
-		<NavigationContainer theme={navTheme}>
+		<NavigationContainer
+			key={hasSchedule ? 'main' : 'onboarding'}
+			theme={navTheme}
+		>
 			<Stack.Navigator
-				key={hasSchedule ? 'main' : 'onboarding'}
 				initialRouteName={hasSchedule ? 'Main' : 'Onboarding'}
 				screenOptions={{ headerShown: false }}
 			>
