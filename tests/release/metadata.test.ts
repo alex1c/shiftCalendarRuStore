@@ -12,8 +12,8 @@ describe('release metadata', () => {
 		expect(expo.android.package).toBe(
 			'com.calculatorplatform.shiftcalendar',
 		)
-		expect(expo.version).toBe('1.0.0')
-		expect(expo.android.versionCode).toBe(1)
+		expect(expo.version).toBe('1.0.1')
+		expect(expo.android.versionCode).toBe(2)
 	})
 
 	it('points Expo and adaptive icons at the master release art', () => {

@@ -6,6 +6,7 @@ export { AnalyticsProvider } from './AnalyticsProvider'
 export {
 	activateAnalytics,
 	isAnalyticsActivated,
+	resolveAppMetricaModule,
 	trackEvent,
 	__resetAnalyticsForTests,
 } from './analytics'

@@ -94,8 +94,11 @@ jest.mock('yandex-mobile-ads', () => ({
 }))
 
 jest.mock('@appmetrica/react-native-analytics', () => ({
-	activateWithConfig: jest.fn(),
-	reportEvent: jest.fn(),
+	__esModule: true,
+	default: {
+		activate: jest.fn(),
+		reportEvent: jest.fn(),
+	},
 }))
 
 jest.mock('expo-constants', () => ({

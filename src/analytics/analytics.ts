@@ -1,6 +1,9 @@
 /**
  * AppMetrica wrapper — activates only when a real API key is configured.
  * Failures never throw to callers; missing key is a quiet no-op.
+ *
+ * Uses AppMetrica.activate() from @appmetrica/react-native-analytics@4.2.0
+ * (activateWithConfig is outdated README API and must not be used).
  */
 
 import {
@@ -13,13 +16,15 @@ import {
 	type AnalyticsProperties,
 } from './events'
 
+type AppMetricaActivationConfig = {
+	apiKey: string
+	sessionTimeout?: number
+	firstActivationAsUpdate?: boolean
+	logs?: boolean
+}
+
 type AppMetricaModule = {
-	activateWithConfig: (config: {
-		apiKey: string
-		sessionTimeout?: number
-		firstActivationAsUpdate?: boolean
-		logs?: boolean
-	}) => void
+	activate: (config: AppMetricaActivationConfig) => void
 	reportEvent: (
 		name: string,
 		params?: Record<string, string | number | boolean>,
@@ -29,24 +34,36 @@ type AppMetricaModule = {
 let activated = false
 let activationAttempted = false
 
+/**
+ * Resolve the AppMetrica default export (or module itself) when it exposes
+ * activate() as required by SDK 4.2.0.
+ */
+export function resolveAppMetricaModule (
+	mod: unknown,
+): AppMetricaModule | null {
+	if (!mod || typeof mod !== 'object') {
+		return null
+	}
+	const candidate = mod as Record<string, unknown>
+	if (typeof candidate.activate === 'function') {
+		return candidate as unknown as AppMetricaModule
+	}
+	const nested = candidate.default
+	if (
+		nested &&
+		typeof nested === 'object' &&
+		typeof (nested as Record<string, unknown>).activate === 'function'
+	) {
+		return nested as AppMetricaModule
+	}
+	return null
+}
+
 function loadAppMetrica (): AppMetricaModule | null {
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
-		const mod = require('@appmetrica/react-native-analytics') as
-			| AppMetricaModule
-			| { default: AppMetricaModule }
-		if (mod && 'activateWithConfig' in mod) {
-			return mod
-		}
-		if (
-			mod &&
-			'default' in mod &&
-			mod.default &&
-			'activateWithConfig' in mod.default
-		) {
-			return mod.default
-		}
-		return null
+		const mod = require('@appmetrica/react-native-analytics')
+		return resolveAppMetricaModule(mod)
 	} catch {
 		return null
 	}
@@ -72,7 +89,7 @@ export function activateAnalytics (): { ok: boolean; reason?: string } {
 		return { ok: false, reason: 'sdk_unavailable' }
 	}
 	try {
-		sdk.activateWithConfig({
+		sdk.activate({
 			apiKey,
 			sessionTimeout: 120,
 			firstActivationAsUpdate: false,

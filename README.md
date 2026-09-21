@@ -17,7 +17,7 @@ Internal engineering name: **shift-calendar** (not shown in store UI).
 | Default branch | `main` |
 | Android package | `com.calculatorplatform.shiftcalendar` |
 | Display name | Мой график смен |
-| Version | `1.0.0` (versionCode `1`) |
+| Version | `1.0.1` (versionCode `2`) |
 | Developer | ForestMusic · https://forest-music.ru |
 | Contact | rustore-alex1c@yandex.ru |
 
