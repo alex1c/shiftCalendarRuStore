@@ -13,10 +13,6 @@ type AnalyticsProviderProps = {
 
 export function AnalyticsProvider ({ children }: AnalyticsProviderProps) {
 	useEffect(() => {
-		// Temporary DEV-only mount marker for device QA logcat.
-		if (__DEV__) {
-			console.log('[AnalyticsDebug] provider mounted')
-		}
 		activateAnalytics()
 		trackEvent(ANALYTICS_EVENTS.appOpen)
 	}, [])

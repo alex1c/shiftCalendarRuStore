@@ -53,7 +53,7 @@ function renderCell (cell: CalendarExportCell, combined: boolean): string {
 	)
 }
 
-const PDF_FOOTER_LABEL = 'График составлен в приложении «Мой график смен» • RuStore'
+const PDF_FOOTER_LABEL = 'Мой график смен в RuStore'
 
 export function buildPdfFooter (url: string | null = RUSTORE_APP_URL): string {
 	const label = escapeHtml(PDF_FOOTER_LABEL)

@@ -30,8 +30,9 @@ import {
 export const PDF_APP_TITLE = 'Мой график смен'
 export const PDF_OVERRIDE_MARKER = '*'
 export const PDF_OVERRIDE_LEGEND = '* — изменено вручную'
-/** Reserved for the published RuStore listing; keep null until the URL exists. */
-export const RUSTORE_APP_URL: string | null = null
+/** Published RuStore listing — used as the clickable PDF footer href. */
+export const RUSTORE_APP_URL =
+	'https://www.rustore.ru/catalog/app/com.calculatorplatform.shiftcalendar'
 
 export type CalendarExportMode = 'single' | 'combined'
 

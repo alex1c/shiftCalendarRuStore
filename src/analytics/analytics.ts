@@ -4,6 +4,11 @@
  *
  * Uses AppMetrica.activate() from @appmetrica/react-native-analytics@4.2.0
  * (activateWithConfig is outdated README API and must not be used).
+ *
+ * Hermes/Metro runtime shape for 4.2.0:
+ *   require(...) → { default: class/function AppMetrica }
+ *   typeof default === 'function' (not 'object')
+ *   default.activate / default.reportEvent are static methods
  */
 
 import {
@@ -11,7 +16,6 @@ import {
 	resolveAppMetricaApiKey,
 } from './analyticsConfig'
 import {
-	ANALYTICS_EVENTS,
 	sanitizeAnalyticsProperties,
 	type AnalyticsEventName,
 	type AnalyticsProperties,
@@ -33,179 +37,97 @@ type AppMetricaModule = {
 }
 
 let activated = false
-let activationAttempted = false
-/** DEV-only: log app_open track request once to keep logcat readable. */
-let appOpenDebugLogged = false
+/**
+ * Set only after native activate() throws — avoids hammering a broken SDK.
+ * SDK-unavailable / missing-key do NOT lock retries forever.
+ */
+let activationFailedPermanently = false
 
 /**
- * Mask API key for DEV logs: prefix...suffix, never the full secret.
- * Example: e0b1b59c-bed2-... → e0b1b59c...6a32
+ * True when `value` exposes the AppMetrica 4.2 activate/reportEvent surface.
+ * Classes are typeof 'function' in JS — must not require typeof === 'object'.
  */
-function maskApiKeyForDebug (apiKey: string): string {
-	if (apiKey.length < 12) {
-		return '(too-short)'
+function isAppMetricaModule (value: unknown): value is AppMetricaModule {
+	if (value == null) {
+		return false
 	}
-	return `${apiKey.slice(0, 8)}...${apiKey.slice(-4)}`
-}
-
-/** Safe error text for DEV logs — message only, no payloads. */
-function safeErrorForDebug (error: unknown): string {
-	if (error instanceof Error) {
-		return error.message || error.name
+	const kind = typeof value
+	if (kind !== 'object' && kind !== 'function') {
+		return false
 	}
-	return typeof error === 'string' ? error : 'unknown_error'
+	const record = value as Record<string, unknown>
+	return (
+		typeof record.activate === 'function' &&
+		typeof record.reportEvent === 'function'
+	)
 }
 
 /**
  * Resolve the AppMetrica default export (or module itself) when it exposes
  * activate() as required by SDK 4.2.0.
+ * Accepts object OR callable/class default exports (Hermes runtime).
  */
 export function resolveAppMetricaModule (
 	mod: unknown,
 ): AppMetricaModule | null {
-	if (!mod || typeof mod !== 'object') {
+	if (isAppMetricaModule(mod)) {
+		return mod
+	}
+	if (mod == null) {
 		return null
 	}
-	const candidate = mod as Record<string, unknown>
-	if (typeof candidate.activate === 'function') {
-		return candidate as unknown as AppMetricaModule
+	const kind = typeof mod
+	if (kind !== 'object' && kind !== 'function') {
+		return null
 	}
-	const nested = candidate.default
-	if (
-		nested &&
-		typeof nested === 'object' &&
-		typeof (nested as Record<string, unknown>).activate === 'function'
-	) {
-		return nested as AppMetricaModule
+	const nested = (mod as { default?: unknown }).default
+	if (isAppMetricaModule(nested)) {
+		return nested
 	}
 	return null
-}
-
-/**
- * DEV-only: dump require() success and export shape so logcat shows whether
- * activate lives on module vs module.default (CJS/Metro interop).
- */
-function logAppMetricaModuleShape (
-	requireSucceeded: boolean,
-	mod: unknown,
-): void {
-	if (!__DEV__) {
-		return
-	}
-	console.log(
-		`[AnalyticsDebug] require succeeded ${requireSucceeded ? 'YES' : 'NO'}`,
-	)
-	console.log(`[AnalyticsDebug] module typeof=${typeof mod}`)
-	if (!mod || typeof mod !== 'object') {
-		console.log('[AnalyticsDebug] module.activate=<n/a>')
-		console.log('[AnalyticsDebug] module.default=<n/a>')
-		console.log('[AnalyticsDebug] default.activate=<n/a>')
-		return
-	}
-	const record = mod as Record<string, unknown>
-	const nested = record.default
-	console.log('[AnalyticsDebug] module loaded')
-	console.log(`[AnalyticsDebug] module.activate=${typeof record.activate}`)
-	console.log(`[AnalyticsDebug] module.default=${typeof nested}`)
-	if (nested && typeof nested === 'object') {
-		console.log(
-			`[AnalyticsDebug] default.activate=${typeof (nested as Record<string, unknown>).activate}`,
-		)
-	} else {
-		console.log('[AnalyticsDebug] default.activate=<n/a>')
-	}
 }
 
 function loadAppMetrica (): AppMetricaModule | null {
 	try {
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const mod = require('@appmetrica/react-native-analytics')
-		logAppMetricaModuleShape(true, mod)
 		return resolveAppMetricaModule(mod)
-	} catch (error) {
-		logAppMetricaModuleShape(false, null)
-		if (__DEV__) {
-			console.log(
-				`[AnalyticsDebug] AppMetrica require failed: ${safeErrorForDebug(error)}`,
-			)
-		}
+	} catch {
 		return null
 	}
 }
 
 /**
- * Activate AppMetrica once. Safe when the key is missing or the native
- * module is unavailable (Expo Go / incomplete native build).
+ * Activate AppMetrica once on success. Safe when the key is missing or the
+ * native module is unavailable (Expo Go / incomplete native build).
  */
 export function activateAnalytics (): { ok: boolean; reason?: string } {
-	if (__DEV__) {
-		console.log('[AnalyticsDebug] activateAnalytics entered')
-		console.log(
-			`[AnalyticsDebug] state activationAttempted=${activationAttempted} activated=${activated}`,
-		)
+	if (activated) {
+		return { ok: true }
 	}
-	if (activationAttempted) {
-		if (__DEV__) {
-			console.log(
-				`[AnalyticsDebug] skip activationAttempted activated=${activated}`,
-			)
-		}
-		return activated
-			? { ok: true }
-			: { ok: false, reason: 'activation_failed_earlier' }
+	if (activationFailedPermanently) {
+		return { ok: false, reason: 'activation_failed_earlier' }
 	}
-	activationAttempted = true
-	if (__DEV__) {
-		console.log('[AnalyticsDebug] resolving apiKey')
-	}
-	// Diagnostic try/catch only around key lookup; rethrow to keep production behavior.
-	let apiKey = ''
-	try {
-		apiKey = resolveAppMetricaApiKey()
-		if (__DEV__) {
-			console.log(
-				`[AnalyticsDebug] apiKey resolved=${apiKey ? maskApiKeyForDebug(apiKey) : '(empty)'}`,
-			)
-		}
-	} catch (error) {
-		if (__DEV__) {
-			console.log(
-				`[AnalyticsDebug] apiKey resolve threw: ${safeErrorForDebug(error)}`,
-			)
-		}
-		throw error
-	}
+	const apiKey = resolveAppMetricaApiKey()
 	if (!apiKey) {
 		return { ok: false, reason: 'missing_api_key' }
 	}
 	const sdk = loadAppMetrica()
 	if (!sdk) {
-		if (__DEV__) {
-			console.log('[AnalyticsDebug] sdk unresolved after require/resolve')
-		}
+		// Do not lock retries — Metro/native may become available later.
 		return { ok: false, reason: 'sdk_unavailable' }
 	}
 	try {
-		if (__DEV__) {
-			console.log('[AnalyticsDebug] calling AppMetrica.activate')
-		}
 		sdk.activate({
 			apiKey,
 			sessionTimeout: 120,
 			firstActivationAsUpdate: false,
 			logs: __DEV__,
 		})
-		if (__DEV__) {
-			console.log('[AnalyticsDebug] AppMetrica.activate returned')
-		}
 		activated = true
 		return { ok: true }
-	} catch (error) {
-		if (__DEV__) {
-			console.log(
-				`[AnalyticsDebug] AppMetrica activation failed: ${safeErrorForDebug(error)}`,
-			)
-		}
+	} catch {
+		activationFailedPermanently = true
 		activated = false
 		return { ok: false, reason: 'activation_threw' }
 	}
@@ -217,18 +139,6 @@ export function trackEvent (
 	properties?: Record<string, unknown>,
 ): void {
 	try {
-		// First app_open only — confirms provider reached track without PII.
-		if (
-			__DEV__ &&
-			name === ANALYTICS_EVENTS.appOpen &&
-			!appOpenDebugLogged
-		) {
-			appOpenDebugLogged = true
-			console.log('[AnalyticsDebug] appOpen requested')
-			console.log(
-				`[AnalyticsDebug] analytics active=${activated}`,
-			)
-		}
 		if (!activated && hasAppMetricaApiKey()) {
 			activateAnalytics()
 		}
@@ -253,8 +163,7 @@ export function trackEvent (
 /** Test helper — reset module state between Jest cases. */
 export function __resetAnalyticsForTests (): void {
 	activated = false
-	activationAttempted = false
-	appOpenDebugLogged = false
+	activationFailedPermanently = false
 }
 
 export function isAnalyticsActivated (): boolean {

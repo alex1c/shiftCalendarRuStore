@@ -26,11 +26,17 @@ export const YANDEX_PRODUCTION_UNITS = {
 	rewarded: 'R-M-20020358-6',
 } as const
 
-export type BannerPlacement = 'calendar' | 'statistics' | 'more'
+export type BannerPlacement =
+	| 'calendar'
+	| 'statistics'
+	| 'more'
+	| 'today'
+	| 'notifications'
 
 /**
- * Map calm-screen placements to production banner blocks.
- * Today has no banner (policy: not above the fold).
+ * Map calm / browse screens to production banner blocks.
+ * Form-heavy protected flows (edit day, salary, backup) stay banner-free.
+ * Reuses the fourth block for Today + reminders (no new cabinet IDs).
  */
 export const BANNER_PLACEMENT_UNITS: Record<
 	BannerPlacement,
@@ -39,6 +45,8 @@ export const BANNER_PLACEMENT_UNITS: Record<
 	calendar: YANDEX_PRODUCTION_UNITS.banners[0],
 	statistics: YANDEX_PRODUCTION_UNITS.banners[1],
 	more: YANDEX_PRODUCTION_UNITS.banners[2],
+	today: YANDEX_PRODUCTION_UNITS.banners[3],
+	notifications: YANDEX_PRODUCTION_UNITS.banners[3],
 }
 
 /** Whether this JS runtime should use demo units + SDK debug helpers. */

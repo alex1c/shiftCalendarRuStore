@@ -12,7 +12,7 @@ import { useFocusEffect } from '@react-navigation/native'
 
 import { Screen } from '@/src/components/Screen'
 import { AppButton, AppSwitchRow, AppTextField, SurfaceCard } from '@/src/components/ui'
-import { useAdsProtectedFlow } from '@/src/ads'
+import { BannerAdSlot, useAdsProtectedFlow } from '@/src/ads'
 import {
 	ANALYTICS_EVENTS,
 	trackEvent,
@@ -459,6 +459,8 @@ export function NotificationsScreen () {
 					</Text>
 				)}
 			</SurfaceCard>
+			{/* Bottom banner below settings — above tab bar safe area. */}
+			<BannerAdSlot placement="notifications" />
 		</Screen>
 	)
 }

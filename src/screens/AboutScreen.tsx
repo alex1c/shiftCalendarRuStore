@@ -4,6 +4,7 @@
 
 import { Linking, Pressable, StyleSheet, Text } from 'react-native'
 
+import { BannerAdSlot } from '@/src/ads'
 import { Screen } from '@/src/components/Screen'
 import { SurfaceCard } from '@/src/components/ui'
 import { spacing, typography, useTheme } from '@/src/theme'
@@ -12,6 +13,8 @@ const DEVELOPER_SITE = 'https://forest-music.ru'
 const PRIVACY_URL =
 	'https://alex1c.github.io/shiftCalendarRuStore/privacy.html'
 const CONTACT_EMAIL = 'rustore-alex1c@yandex.ru'
+const OTHER_APPS_URL =
+	'https://www.rustore.ru/catalog/developer/pw0k858f'
 
 export function AboutScreen () {
 	const { colors } = useTheme()
@@ -70,7 +73,20 @@ export function AboutScreen () {
 						{CONTACT_EMAIL}
 					</Text>
 				</Pressable>
+				<Pressable
+					accessibilityRole="link"
+					accessibilityLabel="Другие наши программы"
+					onPress={() => {
+						void Linking.openURL(OTHER_APPS_URL)
+					}}
+					style={styles.linkRow}
+				>
+					<Text style={[styles.link, { color: colors.primary }]}>
+						Другие наши программы
+					</Text>
+				</Pressable>
 			</SurfaceCard>
+			<BannerAdSlot placement="more" />
 		</Screen>
 	)
 }

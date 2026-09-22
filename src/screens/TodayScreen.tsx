@@ -7,6 +7,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native'
 import { useFocusEffect, useNavigation } from '@react-navigation/native'
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs'
 
+import { BannerAdSlot } from '@/src/ads'
 import { ProfileSwitcher } from '@/src/components/ProfileSwitcher'
 import { Screen } from '@/src/components/Screen'
 import { AppButton, SurfaceCard } from '@/src/components/ui'
@@ -209,6 +210,8 @@ export function TodayScreen () {
 					/>
 				) : null}
 			</View>
+			{/* Sticky bottom banner — above tab bar, never over primary actions. */}
+			<BannerAdSlot placement="today" />
 		</Screen>
 	)
 }

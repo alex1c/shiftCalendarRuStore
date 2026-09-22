@@ -4,8 +4,9 @@
 
 import { useEffect } from 'react'
 
-import { useAds } from '@/src/ads'
 import { useAppBootstrap } from '@/src/features/bootstrap/AppBootstrap'
+
+import { useAds } from './AdsProvider'
 
 /**
  * Keeps onboarding + first-main flags aligned with persisted schedule state.

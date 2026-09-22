@@ -275,13 +275,16 @@ describe('buildCalendarPdfHtml', () => {
 		expect(html).toContain('Сентябрь 2026')
 		expect(html).toContain('Пн')
 		expect(html).toContain('@page { size: A4 landscape;')
-		expect(html).toContain('График составлен в приложении «Мой график смен» • RuStore')
+		expect(html).toContain('Мой график смен в RuStore')
 		expect(html).toContain('class="app-footer"')
+		expect(html).toContain(
+			'href="https://www.rustore.ru/catalog/app/com.calculatorplatform.shiftcalendar"',
+		)
 	})
 
 	it('renders and escapes a future RuStore URL when configured', () => {
 		expect(buildPdfFooter('https://example.test/app?a=1&b=<x>')).toBe(
-			'<a href="https://example.test/app?a=1&amp;b=&lt;x&gt;">График составлен в приложении «Мой график смен» • RuStore</a>',
+			'<a href="https://example.test/app?a=1&amp;b=&lt;x&gt;">Мой график смен в RuStore</a>',
 		)
 	})
 })
