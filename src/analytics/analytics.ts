@@ -140,18 +140,40 @@ function loadAppMetrica (): AppMetricaModule | null {
 export function activateAnalytics (): { ok: boolean; reason?: string } {
 	if (__DEV__) {
 		console.log('[AnalyticsDebug] activateAnalytics entered')
+		console.log(
+			`[AnalyticsDebug] state activationAttempted=${activationAttempted} activated=${activated}`,
+		)
 	}
 	if (activationAttempted) {
+		if (__DEV__) {
+			console.log(
+				`[AnalyticsDebug] skip activationAttempted activated=${activated}`,
+			)
+		}
 		return activated
 			? { ok: true }
 			: { ok: false, reason: 'activation_failed_earlier' }
 	}
 	activationAttempted = true
-	const apiKey = resolveAppMetricaApiKey()
 	if (__DEV__) {
-		console.log(
-			`[AnalyticsDebug] apiKey=${apiKey ? maskApiKeyForDebug(apiKey) : '(empty)'}`,
-		)
+		console.log('[AnalyticsDebug] resolving apiKey')
+	}
+	// Diagnostic try/catch only around key lookup; rethrow to keep production behavior.
+	let apiKey = ''
+	try {
+		apiKey = resolveAppMetricaApiKey()
+		if (__DEV__) {
+			console.log(
+				`[AnalyticsDebug] apiKey resolved=${apiKey ? maskApiKeyForDebug(apiKey) : '(empty)'}`,
+			)
+		}
+	} catch (error) {
+		if (__DEV__) {
+			console.log(
+				`[AnalyticsDebug] apiKey resolve threw: ${safeErrorForDebug(error)}`,
+			)
+		}
+		throw error
 	}
 	if (!apiKey) {
 		return { ok: false, reason: 'missing_api_key' }
