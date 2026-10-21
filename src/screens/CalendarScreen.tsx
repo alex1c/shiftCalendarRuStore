@@ -323,7 +323,10 @@ export function CalendarScreen ({ navigation, route }: Props) {
 	const todayHours = formatShiftHours(todayDay.shift)
 
 	return (
-		<Screen includeBottomSafeArea={false}>
+		<Screen
+			includeBottomSafeArea={false}
+			footer={<BannerAdSlot placement="calendar" />}
+		>
 			<DiscoveryHintModal
 				visible={shareHintVisible}
 				title="Поделитесь графиком"
@@ -642,7 +645,6 @@ export function CalendarScreen ({ navigation, route }: Props) {
 					</Text>
 				) : null}
 			</View>
-			<BannerAdSlot placement="calendar" />
 		</Screen>
 	)
 }

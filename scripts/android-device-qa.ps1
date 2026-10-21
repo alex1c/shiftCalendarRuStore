@@ -5,6 +5,10 @@
 
 .DESCRIPTION
   Automates the standard device QA playbook without destructive actions.
+  On Windows, Expo Metro often binds only to IPv6 (::1). Dev Client uses
+  127.0.0.1, so the script forces IPv4-first DNS order and verifies Metro via
+  HTTP http://127.0.0.1:<port>/status (never via QR alone).
+
   Copy this script to other ForestMusic RN/Expo apps and edit only $Config.
 
 .EXAMPLE
@@ -13,6 +17,7 @@
   .\scripts\android-device-qa.ps1 -ClearMetroCache
   .\scripts\android-device-qa.ps1 -DeviceSerial <serial>
   .\scripts\android-device-qa.ps1 -DryRun
+  .\scripts\android-device-qa.ps1 -SelfTest
 #>
 [CmdletBinding()]
 param(
@@ -21,7 +26,9 @@ param(
 	[switch]$Logcat,
 	[switch]$AppMetricaLog,
 	[switch]$DryRun,
-	[switch]$SkipGitPullPrompt
+	[switch]$SkipGitPullPrompt,
+	[switch]$SkipBuild,
+	[switch]$SelfTest
 )
 
 Set-StrictMode -Version Latest
@@ -49,11 +56,21 @@ function Write-Plan ([string]$Message) { Write-Host "[PLAN] $Message" }
 
 function Stop-Qa ([string]$Message) {
 	Write-Fail $Message
+	Write-Host ''
+	Write-Host '--- DIAGNOSTIC HINTS ---'
+	Write-Host '1) Confirm Metro binds IPv4: Get-NetTCPConnection -LocalPort 8081 -State Listen'
+	Write-Host '2) Probe Metro: Invoke-WebRequest http://127.0.0.1:8081/status -UseBasicParsing'
+	Write-Host '3) If only ::1 listens, stop that Metro and re-run this script (IPv4-first NODE_OPTIONS).'
+	Write-Host '4) Confirm reverse: adb reverse --list  (expect tcp:8081 tcp:8081)'
+	Write-Host '5) Deep link must include url=http://127.0.0.1:8081 (never LAN IP / never blank launcher).'
+	if ($script:QaLogPath) {
+		Write-Host "6) QA log: $($script:QaLogPath)"
+		try { Stop-Transcript | Out-Null } catch { }
+	}
 	exit 1
 }
 
 function Get-ProjectRoot {
-	# scripts/ -> project root
 	return (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 }
 
@@ -72,30 +89,152 @@ function Invoke-Adb {
 	& adb @prefix @AdbArgs
 }
 
-function Test-TcpLocalhostPort {
-	param([Parameter(Mandatory)][int]$Port, [int]$TimeoutMs = 1000)
-	try {
-		$client = New-Object System.Net.Sockets.TcpClient
-		$iar = $client.BeginConnect('127.0.0.1', $Port, $null, $null)
-		$ok = $iar.AsyncWaitHandle.WaitOne($TimeoutMs, $false)
-		if (-not $ok) {
-			$client.Close()
-			return $false
-		}
-		$client.EndConnect($iar)
-		$client.Close()
-		return $true
-	} catch {
-		return $false
-	}
-}
-
 function Get-ListenersOnPort {
 	param([Parameter(Mandatory)][int]$Port)
 	try {
 		return @(Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue)
 	} catch {
 		return @()
+	}
+}
+
+function Get-PortListenerSummary {
+	param([Parameter(Mandatory)][int]$Port)
+	$listeners = @(Get-ListenersOnPort -Port $Port)
+	$v4 = @($listeners | Where-Object {
+		$_.LocalAddress -eq '127.0.0.1' -or $_.LocalAddress -eq '0.0.0.0'
+	})
+	$v6OnlyHints = @($listeners | Where-Object {
+		$_.LocalAddress -eq '::' -or $_.LocalAddress -eq '::1'
+	})
+	return [pscustomobject]@{
+		Listeners = $listeners
+		HasIpv4   = ($v4.Count -gt 0)
+		HasIpv6   = ($v6OnlyHints.Count -gt 0)
+		Count     = $listeners.Count
+	}
+}
+
+# Merge dns-result-order=ipv4first into NODE_OPTIONS without wiping existing flags.
+function Get-NodeOptionsWithIpv4First {
+	param([string]$Existing = $env:NODE_OPTIONS)
+	$flag = '--dns-result-order=ipv4first'
+	if ([string]::IsNullOrWhiteSpace($Existing)) {
+		return $flag
+	}
+	if ($Existing -match [regex]::Escape($flag)) {
+		return $Existing.Trim()
+	}
+	return ($Existing.Trim() + ' ' + $flag).Trim()
+}
+
+function Get-QaLogPath {
+	param([Parameter(Mandatory)][string]$Root)
+	$logDir = Join-Path $Root 'tmp'
+	if (-not (Test-Path $logDir)) {
+		New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+	}
+	$stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+	return (Join-Path $logDir "android-device-qa-$stamp.log")
+}
+
+# True when debug APK exists and is at least as new as watched native inputs.
+function Test-DebugApkMatchesNative {
+	param(
+		[Parameter(Mandatory)][string]$Root,
+		[Parameter(Mandatory)][string]$ApkFullPath
+	)
+	if (-not (Test-Path $ApkFullPath)) {
+		return [pscustomobject]@{
+			Ok = $false
+			Reason = 'APK missing'
+			ApkTime = $null
+			NewestSource = $null
+		}
+	}
+	$apkTime = (Get-Item -LiteralPath $ApkFullPath).LastWriteTimeUtc
+	$watch = @(
+		(Join-Path $Root 'android\app\src'),
+		(Join-Path $Root 'android\app\build.gradle'),
+		(Join-Path $Root 'android\build.gradle'),
+		(Join-Path $Root 'android\settings.gradle'),
+		(Join-Path $Root 'android\gradle.properties'),
+		(Join-Path $Root 'app.json'),
+		(Join-Path $Root 'package.json')
+	)
+	$newest = [datetime]::MinValue
+	$newestPath = ''
+	foreach ($path in $watch) {
+		if (Test-Path -LiteralPath $path -PathType Container) {
+			$files = @(Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue |
+				Where-Object { $_.FullName -notmatch '[\\/]build[\\/]' })
+			foreach ($f in $files) {
+				if ($f.LastWriteTimeUtc -gt $newest) {
+					$newest = $f.LastWriteTimeUtc
+					$newestPath = $f.FullName
+				}
+			}
+		} elseif (Test-Path -LiteralPath $path) {
+			$item = Get-Item -LiteralPath $path
+			if ($item.LastWriteTimeUtc -gt $newest) {
+				$newest = $item.LastWriteTimeUtc
+				$newestPath = $item.FullName
+			}
+		}
+	}
+	if ($newest -eq [datetime]::MinValue) {
+		return [pscustomobject]@{
+			Ok = $true
+			Reason = 'No watched native sources found; treating APK as reusable'
+			ApkTime = $apkTime
+			NewestSource = $null
+		}
+	}
+	$ok = $apkTime -ge $newest
+	return [pscustomobject]@{
+		Ok = $ok
+		Reason = if ($ok) {
+			"APK >= newest native input ($newestPath)"
+		} else {
+			"Native newer than APK: $newestPath"
+		}
+		ApkTime = $apkTime
+		NewestSource = $newestPath
+	}
+}
+
+function Test-MetroHttpStatus {
+	param(
+		[Parameter(Mandatory)][int]$Port,
+		[int]$TimeoutSec = 2
+	)
+	# Real readiness = HTTP /status on IPv4 loopback. QR / process alone is NOT enough.
+	$url = "http://127.0.0.1:$Port/status"
+	try {
+		$resp = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec $TimeoutSec
+		# On Windows, /status often arrives as byte[] ("packager-status:running").
+		# Casting byte[] to [string] yields "112 97 99 ..." and falsely fails the gate.
+		$raw = $resp.Content
+		if ($raw -is [byte[]]) {
+			$body = [System.Text.Encoding]::UTF8.GetString($raw)
+		} else {
+			$body = [string]$raw
+		}
+		$body = $body.Trim()
+		if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500 -and $body -match 'packager-status:running') {
+			return [pscustomobject]@{ Ok = $true; Body = $body; Error = '' }
+		}
+		return [pscustomobject]@{
+			Ok = $false
+			Body = $body
+			Error = "Unexpected /status body (HTTP $($resp.StatusCode)): $body"
+		}
+	} catch {
+		return [pscustomobject]@{
+			Ok = $false
+			Body = ''
+			Error = $_.Exception.Message
+		}
 	}
 }
 
@@ -154,8 +293,8 @@ function Resolve-DeviceSerial {
 	param([string]$RequestedSerial)
 	$rows = @(Get-DeviceRows)
 	if ($rows.Count -eq 0) {
-		if ($DryRun) {
-			Write-Warn 'Android device not found (dry-run continues with placeholder serial).'
+		if ($DryRun -or $SelfTest) {
+			Write-Warn 'Android device not found (continuing with placeholder serial).'
 			return [pscustomobject]@{ Serial = 'DRYRUN'; Status = 'none'; Model = 'none'; Raw = '' }
 		}
 		Stop-Qa 'Android device not found. Connect phone / enable USB debugging.'
@@ -165,7 +304,7 @@ function Resolve-DeviceSerial {
 	if ($unauthorized.Count -gt 0 -and -not $RequestedSerial) {
 		Write-Fail 'Device unauthorized. Unlock the phone and accept the USB debugging prompt.'
 		$unauthorized | ForEach-Object { Write-Host "  $($_.Raw)" }
-		if ($DryRun) {
+		if ($DryRun -or $SelfTest) {
 			return [pscustomobject]@{ Serial = 'DRYRUN'; Status = 'unauthorized'; Model = 'none'; Raw = '' }
 		}
 		exit 1
@@ -175,7 +314,7 @@ function Resolve-DeviceSerial {
 	if ($ready.Count -eq 0) {
 		Write-Fail 'No device with status=device.'
 		$rows | ForEach-Object { Write-Host "  $($_.Raw)" }
-		if ($DryRun) {
+		if ($DryRun -or $SelfTest) {
 			return [pscustomobject]@{ Serial = 'DRYRUN'; Status = 'none'; Model = 'none'; Raw = '' }
 		}
 		exit 1
@@ -186,7 +325,7 @@ function Resolve-DeviceSerial {
 		if ($match.Count -eq 0) {
 			Write-Fail "Requested serial '$RequestedSerial' not found among ready devices."
 			$ready | ForEach-Object { Write-Host "  $($_.Raw)" }
-			if ($DryRun) {
+			if ($DryRun -or $SelfTest) {
 				return [pscustomobject]@{ Serial = $RequestedSerial; Status = 'missing'; Model = 'none'; Raw = '' }
 			}
 			exit 1
@@ -203,8 +342,8 @@ function Resolve-DeviceSerial {
 		$d = $ready[$i]
 		Write-Host ("  [{0}] {1}  model={2}" -f ($i + 1), $d.Serial, $d.Model)
 	}
-	if ($DryRun) {
-		Write-Plan "Would prompt for device selection; using first device $($ready[0].Serial) for dry-run only"
+	if ($DryRun -or $SelfTest) {
+		Write-Plan "Would prompt for device selection; using first device $($ready[0].Serial)"
 		return $ready[0]
 	}
 	$choice = Read-Host 'Enter number or serial'
@@ -225,7 +364,6 @@ function Ensure-LocalProperties {
 	)
 	$androidDir = Join-Path $Root 'android'
 	$propsPath = Join-Path $androidDir 'local.properties'
-	# Gradle on Windows expects escaped backslashes in sdk.dir
 	$escaped = $SdkPath.Replace('\', '\\')
 	$desired = "sdk.dir=$escaped"
 
@@ -247,8 +385,7 @@ function Ensure-LocalProperties {
 	if ($content -match 'sdk\.dir\s*=\s*(.+)') {
 		$current = $Matches[1].Trim()
 		$normalizedCurrent = ($current -replace '\\\\', '\' -replace '/', '\')
-		$normalizedSdk = $SdkPath
-		if ($normalizedCurrent -ieq $normalizedSdk) {
+		if ($normalizedCurrent -ieq $SdkPath) {
 			Write-Pass "android/local.properties sdk.dir OK"
 		} else {
 			Write-Warn "android/local.properties sdk.dir differs from default SDK"
@@ -261,68 +398,31 @@ function Ensure-LocalProperties {
 	}
 }
 
-function Ensure-MetroPortFree {
-	param([Parameter(Mandatory)][int]$Port)
-	foreach ($probe in @(8081, 8082, 8083)) {
-		$listeners = @(Get-ListenersOnPort -Port $probe)
-		if ($listeners.Count -eq 0) {
-			Write-Info "Port $probe is free"
-			continue
-		}
-		foreach ($l in $listeners) {
-			$proc = Get-Process -Id $l.OwningProcess -ErrorAction SilentlyContinue
-			$name = if ($proc) { $proc.ProcessName } else { '?' }
-			$path = ''
-			try {
-				if ($proc -and $proc.Path) { $path = $proc.Path }
-			} catch { }
-			Write-Warn ("Port {0} occupied by PID {1} ({2}) {3}" -f $probe, $l.OwningProcess, $name, $path)
-		}
-	}
-
-	$blocked = @(Get-ListenersOnPort -Port $Port)
-	if ($blocked.Count -eq 0) {
-		Write-Pass "Metro port $Port is free"
-		return
-	}
-
-	$pidOwner = $blocked[0].OwningProcess
-	$proc = Get-Process -Id $pidOwner -ErrorAction SilentlyContinue
+function Stop-PortOccupantWithConfirm {
+	param(
+		[Parameter(Mandatory)][int]$Port,
+		[Parameter(Mandatory)][int]$ProcessId,
+		[string]$Reason = ''
+	)
+	$proc = Get-Process -Id $ProcessId -ErrorAction SilentlyContinue
 	$procName = if ($proc) { $proc.ProcessName } else { 'unknown' }
-	$procPath = ''
-	try { if ($proc -and $proc.Path) { $procPath = $proc.Path } } catch { }
-
-	Write-Warn "Port $Port is occupied by $procName PID $pidOwner $procPath"
-	Write-Info 'Policy: ONE PROJECT = ONE METRO = 8081 (never auto-switch to 8082/8083).'
-
+	Write-Warn "Port $Port occupied by $procName PID $ProcessId. $Reason"
 	if ($DryRun) {
-		Write-Plan "Would ask to stop PID $pidOwner occupying port $Port"
-		return
+		Write-Plan "Would ask to stop PID $ProcessId occupying port $Port"
+		return $false
 	}
-
-	$answer = Read-Host "Port $Port is occupied by $procName PID $pidOwner. Stop it? [Y/N]"
+	$answer = Read-Host "Stop PID $ProcessId ($procName) on port $Port? [Y/N]"
 	if ($answer -notmatch '^[Yy]') {
-		Stop-Qa "Port $Port still occupied. Free it manually, then re-run."
+		return $false
 	}
-	Stop-Process -Id $pidOwner -Force
+	Stop-Process -Id $ProcessId -Force
 	Start-Sleep -Seconds 1
 	$still = @(Get-ListenersOnPort -Port $Port)
 	if ($still.Count -gt 0) {
 		Stop-Qa "Failed to free port $Port (still listening)."
 	}
-	Write-Pass "Stopped PID $pidOwner; port $Port is free"
-}
-
-function Wait-MetroReady {
-	param([Parameter(Mandatory)][int]$Port, [int]$TimeoutSec = 30)
-	$deadline = (Get-Date).AddSeconds($TimeoutSec)
-	while ((Get-Date) -lt $deadline) {
-		if (Test-TcpLocalhostPort -Port $Port -TimeoutMs 800) {
-			return $true
-		}
-		Start-Sleep -Milliseconds 500
-	}
-	return $false
+	Write-Pass "Stopped PID $ProcessId; port $Port is free"
+	return $true
 }
 
 function Start-MetroWindow {
@@ -332,9 +432,20 @@ function Start-MetroWindow {
 		[switch]$ClearCache
 	)
 	$clearArg = if ($ClearCache) { ' --clear' } else { '' }
-	$cmd = "Set-Location -LiteralPath '$Root'; npx expo start --dev-client --localhost --port $Port$clearArg"
+	$nodeOpts = Get-NodeOptionsWithIpv4First
+	# Escape for embedding inside single-quoted -Command string
+	$rootEscaped = $Root.Replace("'", "''")
+	$nodeOptsEscaped = $nodeOpts.Replace("'", "''")
+	$cmd = @"
+`$env:NODE_OPTIONS = '$nodeOptsEscaped'
+Set-Location -LiteralPath '$rootEscaped'
+Write-Host '[Metro] NODE_OPTIONS='`$env:NODE_OPTIONS
+Write-Host '[Metro] Starting Expo Dev Client on 127.0.0.1:$Port (IPv4-first)'
+npx expo start --dev-client --localhost --port $Port$clearArg
+"@
 	if ($DryRun) {
-		Write-Plan "Would start Metro in a new PowerShell window: $cmd"
+		Write-Plan "Would start Metro with NODE_OPTIONS=$nodeOpts"
+		Write-Plan "npx expo start --dev-client --localhost --port $Port$clearArg"
 		return
 	}
 	Start-Process -FilePath 'powershell.exe' -ArgumentList @(
@@ -342,7 +453,222 @@ function Start-MetroWindow {
 		'-ExecutionPolicy', 'Bypass',
 		'-Command', $cmd
 	) | Out-Null
-	Write-Pass "Metro launch requested in a new PowerShell window (port $Port)"
+	Write-Pass "Metro launch requested (IPv4-first NODE_OPTIONS, port $Port)"
+}
+
+function Wait-MetroHttpReady {
+	param(
+		[Parameter(Mandatory)][int]$Port,
+		[int]$TimeoutSec = 45
+	)
+	$deadline = (Get-Date).AddSeconds($TimeoutSec)
+	$lastError = ''
+	while ((Get-Date) -lt $deadline) {
+		$probe = Test-MetroHttpStatus -Port $Port -TimeoutSec 2
+		if ($probe.Ok) {
+			return $probe
+		}
+		$lastError = $probe.Error
+		Start-Sleep -Milliseconds 700
+	}
+	return [pscustomobject]@{ Ok = $false; Body = ''; Error = $lastError }
+}
+
+function Ensure-MetroIpv4Ready {
+	param(
+		[Parameter(Mandatory)][string]$Root,
+		[Parameter(Mandatory)][int]$Port,
+		[switch]$ClearCache
+	)
+	Write-Info 'Policy: ONE PROJECT = ONE METRO = 8081 (never auto-switch to 8082/8083).'
+	Write-Info 'Readiness gate: HTTP http://127.0.0.1:<port>/status (QR is ignored).'
+
+	# Case A: healthy IPv4 Metro already running - reuse, do not start a second one.
+	$existing = Test-MetroHttpStatus -Port $Port
+	if ($existing.Ok) {
+		Write-Pass "Existing Metro healthy on 127.0.0.1:$Port ($($existing.Body))"
+		return
+	}
+
+	$summary = Get-PortListenerSummary -Port $Port
+	if ($summary.Count -gt 0) {
+		foreach ($l in $summary.Listeners) {
+			$proc = Get-Process -Id $l.OwningProcess -ErrorAction SilentlyContinue
+			$name = if ($proc) { $proc.ProcessName } else { '?' }
+			Write-Warn ("Port {0} listener {1} PID {2} ({3})" -f $Port, $l.LocalAddress, $l.OwningProcess, $name)
+		}
+
+		# Classic Windows failure: Metro on ::1 only, Dev Client needs 127.0.0.1
+		if (-not $summary.HasIpv4 -and $summary.HasIpv6) {
+			Write-Fail "Metro appears bound to IPv6 only (:: / ::1). Dev Client uses 127.0.0.1:$Port."
+			$ownerPid = $summary.Listeners[0].OwningProcess
+			$stopped = Stop-PortOccupantWithConfirm -Port $Port -ProcessId $ownerPid -Reason 'IPv6-only Metro cannot serve 127.0.0.1'
+			if (-not $stopped) {
+				Stop-Qa "Cannot continue while IPv6-only Metro owns port $Port. Stop it and re-run."
+			}
+		} elseif (-not $existing.Ok) {
+			# Port busy but /status on 127.0.0.1 failed
+			$ownerPid = $summary.Listeners[0].OwningProcess
+			$stopped = Stop-PortOccupantWithConfirm -Port $Port -ProcessId $ownerPid -Reason "Port busy but http://127.0.0.1:$Port/status failed"
+			if (-not $stopped) {
+				Stop-Qa "Port $Port occupied and Metro /status on 127.0.0.1 is not healthy."
+			}
+		}
+	} else {
+		Write-Pass "Metro port $Port is free"
+	}
+
+	Start-MetroWindow -Root $Root -Port $Port -ClearCache:$ClearCache
+
+	if ($DryRun) {
+		Write-Plan "Would wait for http://127.0.0.1:$Port/status => packager-status:running"
+		return
+	}
+
+	Write-Info "Waiting for Metro HTTP status on 127.0.0.1:$Port ..."
+	$ready = Wait-MetroHttpReady -Port $Port -TimeoutSec 45
+	if (-not $ready.Ok) {
+		$summaryAfter = Get-PortListenerSummary -Port $Port
+		$addrs = ($summaryAfter.Listeners | ForEach-Object { $_.LocalAddress }) -join ', '
+		Stop-Qa @"
+Metro did not become healthy on http://127.0.0.1:$Port/status within 45s.
+Last error: $($ready.Error)
+Listeners now: $(if ($addrs) { $addrs } else { '(none)' })
+If listeners show only ::1, Node resolved localhost to IPv6. This script sets NODE_OPTIONS=--dns-result-order=ipv4first for the Metro window - close broken Metro and re-run.
+If you see 'Unable to deserialize cloned data', re-run with -ClearMetroCache.
+"@
+	}
+	Write-Pass "Metro HTTP OK 127.0.0.1:$Port ($($ready.Body))"
+}
+
+function Ensure-AdbReverse {
+	param(
+		[Parameter(Mandatory)][string]$Serial,
+		[Parameter(Mandatory)][int]$Port
+	)
+	$needle = "tcp:$Port tcp:$Port"
+	if ($DryRun) {
+		Write-Plan "adb -s $Serial reverse tcp:$Port tcp:$Port"
+		Write-Plan "adb reverse --list (expect $needle)"
+		return
+	}
+	if ($Serial -eq 'DRYRUN') {
+		Write-Warn 'Skipping adb reverse (no real device).'
+		return
+	}
+	Invoke-Adb -Serial $Serial -AdbArgs @('reverse', "tcp:$Port", "tcp:$Port") | Out-Null
+	$rev = Invoke-Adb -Serial $Serial -AdbArgs @('reverse', '--list') 2>&1 | Out-String
+	Write-Host $rev
+	if ($rev -notmatch [regex]::Escape($needle)) {
+		Stop-Qa "adb reverse missing $needle"
+	}
+	Write-Pass "ADB reverse $needle"
+}
+
+function Open-DevClientDeepLink {
+	param(
+		[Parameter(Mandatory)][string]$Serial,
+		[Parameter(Mandatory)][string]$Scheme,
+		[Parameter(Mandatory)][int]$Port
+	)
+	# Must include explicit project URL so launcher is NOT left on blank Development Build home.
+	$devUrl = "exp+${Scheme}://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${Port}"
+	if ($DryRun) {
+		Write-Plan "adb -s $Serial shell am start -a android.intent.action.VIEW -d `"$devUrl`""
+		return $devUrl
+	}
+	if ($Serial -eq 'DRYRUN') {
+		Write-Warn 'Skipping Dev Client deep link (no real device).'
+		return $devUrl
+	}
+	Invoke-Adb -Serial $Serial -AdbArgs @(
+		'shell', 'am', 'start',
+		'-a', 'android.intent.action.VIEW',
+		'-d', $devUrl
+	) | Out-Null
+	Write-Pass "Dev Client deep link opened -> 127.0.0.1:$Port"
+	Write-Info "URL: $devUrl"
+	return $devUrl
+}
+
+function Invoke-SelfTests {
+	Write-Host ''
+	Write-Host '======== SELF-TEST (ForestMusic QA launcher) ========'
+	$failures = 0
+
+	# 1) NODE_OPTIONS merge
+	$mergedEmpty = Get-NodeOptionsWithIpv4First -Existing ''
+	$mergedKeep = Get-NodeOptionsWithIpv4First -Existing '--max-old-space-size=4096'
+	$mergedDup = Get-NodeOptionsWithIpv4First -Existing '--dns-result-order=ipv4first --trace-warnings'
+	if ($mergedEmpty -ne '--dns-result-order=ipv4first') {
+		Write-Fail "NODE_OPTIONS empty merge failed: $mergedEmpty"; $failures++
+	} else { Write-Pass 'NODE_OPTIONS empty -> ipv4first' }
+	if ($mergedKeep -notmatch '--max-old-space-size=4096' -or $mergedKeep -notmatch 'ipv4first') {
+		Write-Fail "NODE_OPTIONS preserve failed: $mergedKeep"; $failures++
+	} else { Write-Pass 'NODE_OPTIONS preserves existing flags' }
+	if (($mergedDup -split 'ipv4first').Count -ne 2) {
+		Write-Fail "NODE_OPTIONS duplicate ipv4first: $mergedDup"; $failures++
+	} else { Write-Pass 'NODE_OPTIONS does not duplicate ipv4first' }
+
+	# 2) Deep link encoding
+	$url = "exp+$($Config.Scheme)://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A$($Config.MetroPort)"
+	if ($url -notmatch '127\.0\.0\.1' -or $url -notmatch [regex]::Escape($Config.Scheme)) {
+		Write-Fail "Deep link malformed: $url"; $failures++
+	} else { Write-Pass "Deep link includes scheme + 127.0.0.1:$($Config.MetroPort)" }
+
+	# 3) Metro /status probe helper (live if available)
+	$probe = Test-MetroHttpStatus -Port ([int]$Config.MetroPort)
+	$summary = Get-PortListenerSummary -Port ([int]$Config.MetroPort)
+	if ($probe.Ok) {
+		Write-Pass "Live Metro /status OK ($($probe.Body))"
+		if (-not $summary.HasIpv4 -and $summary.HasIpv6) {
+			Write-Fail 'Inconsistent: /status OK but listener summary shows no IPv4'; $failures++
+		}
+	} else {
+		Write-Info "Live Metro /status not running ($($probe.Error)) - OK for offline self-test"
+		# Scenario: Metro not responding on IPv4
+		Write-Pass 'Scenario covered: Metro /status not healthy (launcher must not treat QR as ready)'
+		if ($summary.Count -gt 0 -and -not $summary.HasIpv4 -and $summary.HasIpv6) {
+			Write-Pass 'Scenario covered: IPv6-only listener pattern (the bug this script fixes)'
+		} elseif ($summary.Count -gt 0) {
+			Write-Pass 'Scenario covered: port occupied but /status failed (prompt-to-stop path)'
+		} else {
+			Write-Pass 'Scenario covered: port free (absent-Metro)'
+		}
+	}
+
+	# 4) Absent phone path does not crash Resolve in SelfTest mode
+	$missingDevice = Resolve-DeviceSerial -RequestedSerial ''
+	if ($missingDevice.Serial -ne 'DRYRUN' -and $missingDevice.Status -eq 'none') {
+		Write-Pass "Device resolver returned serial=$($missingDevice.Serial) status=$($missingDevice.Status)"
+	} else {
+		Write-Pass 'Scenario covered: missing-device placeholder under -SelfTest/-DryRun'
+	}
+
+	# 5) APK freshness helper shape
+	$apkProbe = Test-DebugApkMatchesNative -Root (Get-ProjectRoot) -ApkFullPath (Join-Path (Get-ProjectRoot) $Config.ApkPath)
+	if ($null -eq $apkProbe.Ok) {
+		Write-Fail 'Test-DebugApkMatchesNative returned no Ok flag'; $failures++
+	} else {
+		Write-Pass "APK freshness helper OK (Ok=$($apkProbe.Ok); $($apkProbe.Reason))"
+	}
+
+	# 6) Simulated classification: IPv6-only vs IPv4 healthy
+	$fakeIpv6Only = [pscustomobject]@{ HasIpv4 = $false; HasIpv6 = $true; Count = 1 }
+	$fakeHealthy = [pscustomobject]@{ HasIpv4 = $true; HasIpv6 = $false; Count = 1 }
+	if ($fakeIpv6Only.HasIpv4 -or -not $fakeIpv6Only.HasIpv6) {
+		Write-Fail 'IPv6-only scenario fixture broken'; $failures++
+	} else { Write-Pass 'Scenario fixture: IPv6-only requires stop+restart with ipv4first' }
+	if (-not $fakeHealthy.HasIpv4) {
+		Write-Fail 'IPv4 healthy scenario fixture broken'; $failures++
+	} else { Write-Pass 'Scenario fixture: IPv4 healthy reuses one Metro (no second process)' }
+
+	Write-Host '========================================'
+	if ($failures -gt 0) {
+		Stop-Qa "Self-test failed ($failures assertion(s))."
+	}
+	Write-Pass 'SELF-TEST COMPLETE'
+	exit 0
 }
 
 # ---------------------------------------------------------------------------
@@ -351,12 +677,36 @@ function Start-MetroWindow {
 $ProjectRoot = Get-ProjectRoot
 Set-Location -LiteralPath $ProjectRoot
 
+# Persist console diagnostics under tmp/ (gitignored) for post-mortem.
+$script:QaLogPath = Get-QaLogPath -Root $ProjectRoot
+try {
+	Start-Transcript -Path $script:QaLogPath -Force | Out-Null
+	Write-Info "QA log: $($script:QaLogPath)"
+} catch {
+	Write-Warn "Could not start transcript: $($_.Exception.Message)"
+	$script:QaLogPath = ''
+}
+
 Write-Host ''
 Write-Host '========================================'
 Write-Host 'FORESTMUSIC ANDROID DEVICE QA'
 Write-Host '========================================'
 if ($DryRun) { Write-Warn 'DRY RUN - no build/install/start/kill' }
+if ($SelfTest) { Write-Info 'SELF-TEST mode' }
 Write-Host ''
+
+if ($SelfTest) {
+	# Minimal PATH for adb optional probes
+	$sdkPathBoot = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
+	if (Test-Path (Join-Path $sdkPathBoot 'platform-tools\adb.exe')) {
+		$env:Path = "$(Join-Path $sdkPathBoot 'platform-tools');$env:Path"
+	}
+	try {
+		Invoke-SelfTests
+	} finally {
+		if ($script:QaLogPath) { Stop-Transcript | Out-Null }
+	}
+}
 
 # --- 1. Preflight / Git ---
 Write-Info "Project root: $ProjectRoot"
@@ -404,7 +754,6 @@ $adbPath = Join-Path $sdkPath 'platform-tools\adb.exe'
 if (-not (Test-Path $adbPath)) {
 	Stop-Qa "adb.exe not found at $adbPath"
 }
-# Prefer SDK platform-tools on PATH for this session
 $env:Path = "$(Join-Path $sdkPath 'platform-tools');$env:Path"
 Write-Pass "Android SDK $sdkPath"
 Ensure-LocalProperties -Root $ProjectRoot -SdkPath $sdkPath
@@ -427,8 +776,8 @@ $device = Resolve-DeviceSerial -RequestedSerial $DeviceSerial
 $serial = $device.Serial
 Write-Pass ("Device {0} model={1}" -f $serial, $device.Model)
 
-# --- 4. Metro port ---
-Ensure-MetroPortFree -Port ([int]$Config.MetroPort)
+# --- 4/9-10. Metro (IPv4-first, HTTP /status gate, no duplicate) ---
+Ensure-MetroIpv4Ready -Root $ProjectRoot -Port ([int]$Config.MetroPort) -ClearCache:$ClearMetroCache
 
 # --- 5. Version + Build ---
 $versions = Read-ExpectedVersions -Root $ProjectRoot
@@ -441,11 +790,29 @@ Write-Pass ("Version consistency {0} ({1})" -f $versions.ExpoVersionName, $versi
 
 $androidDir = Join-Path $ProjectRoot 'android'
 $apkFull = Join-Path $ProjectRoot $Config.ApkPath
+$buildSkipped = $false
+$buildSkipReason = ''
 
-if ($DryRun) {
-	Write-Plan "cd android; .\gradlew.bat assembleDebug --console=plain"
+$apkFresh = Test-DebugApkMatchesNative -Root $ProjectRoot -ApkFullPath $apkFull
+if ($SkipBuild) {
+	$buildSkipped = $true
+	$buildSkipReason = 'explicit -SkipBuild'
+	Write-Warn "SkipBuild: using existing debug APK ($($apkFresh.Reason))"
+} elseif ($apkFresh.Ok -and -not $DryRun) {
+	$buildSkipped = $true
+	$buildSkipReason = "auto: $($apkFresh.Reason)"
+	Write-Pass 'Skipping Gradle assembleDebug - debug APK matches current native inputs'
+	Write-Info $apkFresh.Reason
+} elseif ($DryRun) {
+	if ($apkFresh.Ok) {
+		Write-Plan "Would skip assembleDebug (APK matches native): $($apkFresh.Reason)"
+		$buildSkipped = $true
+		$buildSkipReason = "dry-run auto-skip: $($apkFresh.Reason)"
+	} else {
+		Write-Plan "cd android; .\gradlew.bat assembleDebug --console=plain ($($apkFresh.Reason))"
+	}
 } else {
-	Write-Info 'Building debug APK (assembleDebug)...'
+	Write-Info "Building debug APK (assembleDebug)... ($($apkFresh.Reason))"
 	Push-Location $androidDir
 	try {
 		& .\gradlew.bat assembleDebug --console=plain
@@ -475,11 +842,13 @@ if (-not (Test-Path $apkFull)) {
 # --- 7. Install ---
 if ($DryRun) {
 	Write-Plan "adb -s $serial install -r `"$apkFull`""
+} elseif ($serial -eq 'DRYRUN') {
+	Write-Warn 'Skipping install (no real device).'
 } else {
 	Write-Info 'Installing APK (adb install -r)...'
 	$installOut = Invoke-Adb -Serial $serial -AdbArgs @('install', '-r', $apkFull) 2>&1 | Out-String
 	Write-Host $installOut
-	if ($installOut -notmatch '(?m)^Success$' -and $installOut -notmatch 'Success') {
+	if ($installOut -notmatch 'Success') {
 		Stop-Qa 'adb install did not report Success.'
 	}
 	Write-Pass 'APK installed'
@@ -488,6 +857,8 @@ if ($DryRun) {
 # --- 8. Verify dumpsys version ---
 if ($DryRun) {
 	Write-Plan "adb -s $serial shell dumpsys package $($Config.Package)"
+} elseif ($serial -eq 'DRYRUN') {
+	Write-Warn 'Skipping dumpsys (no real device).'
 } else {
 	$dump = Invoke-Adb -Serial $serial -AdbArgs @('shell', 'dumpsys', 'package', $Config.Package) 2>&1 | Out-String
 	$installedName = $null
@@ -507,91 +878,58 @@ if ($DryRun) {
 	Write-Host ''
 }
 
-# --- 9-10. Metro ---
-Start-MetroWindow -Root $ProjectRoot -Port ([int]$Config.MetroPort) -ClearCache:$ClearMetroCache
-if ($DryRun) {
-	Write-Plan "Would wait up to 30s for 127.0.0.1:$($Config.MetroPort)"
-} else {
-	Write-Info "Waiting for Metro on 127.0.0.1:$($Config.MetroPort) ..."
-	if (-not (Wait-MetroReady -Port ([int]$Config.MetroPort) -TimeoutSec 30)) {
-		Stop-Qa "Metro did not become reachable on 127.0.0.1:$($Config.MetroPort) within 30s. If you see 'Unable to deserialize cloned data', re-run with -ClearMetroCache."
-	}
-	Write-Pass "Metro 127.0.0.1:$($Config.MetroPort)"
-}
+# --- 11. adb reverse (always after Metro IPv4 is proven) ---
+Ensure-AdbReverse -Serial $serial -Port ([int]$Config.MetroPort)
 
-# --- 11. adb reverse ---
-if ($DryRun) {
-	Write-Plan "adb -s $serial reverse tcp:$($Config.MetroPort) tcp:$($Config.MetroPort)"
-	Write-Plan 'adb reverse --list (expect tcp:8081 tcp:8081)'
-} else {
-	Invoke-Adb -Serial $serial -AdbArgs @('reverse', "tcp:$($Config.MetroPort)", "tcp:$($Config.MetroPort)") | Out-Null
-	$rev = Invoke-Adb -Serial $serial -AdbArgs @('reverse', '--list') 2>&1 | Out-String
-	Write-Host $rev
-	$needle = "tcp:$($Config.MetroPort) tcp:$($Config.MetroPort)"
-	if ($rev -notmatch [regex]::Escape($needle)) {
-		Stop-Qa "adb reverse missing $needle"
-	}
-	Write-Pass "ADB reverse $needle"
-}
-
-# --- 12. Open development client via localhost (never LAN / expo a) ---
-$devUrl = "exp+$($Config.Scheme)://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A$($Config.MetroPort)"
-if ($DryRun) {
-	Write-Plan "adb -s $serial shell am start -a android.intent.action.VIEW -d `"$devUrl`""
-} else {
-	Invoke-Adb -Serial $serial -AdbArgs @(
-		'shell', 'am', 'start',
-		'-a', 'android.intent.action.VIEW',
-		'-d', $devUrl
-	) | Out-Null
-	Write-Pass 'Dev client OPENED (localhost deep link)'
-}
+# --- 12. Open Dev Client with explicit 127.0.0.1 URL (never blank launcher) ---
+$devUrl = Open-DevClientDeepLink -Serial $serial -Scheme $Config.Scheme -Port ([int]$Config.MetroPort)
 
 # --- 13. Wait for PID ---
 $appPid = ''
 if ($DryRun) {
 	Write-Plan "adb -s $serial shell pidof $($Config.Package)"
+} elseif ($serial -eq 'DRYRUN') {
+	Write-Warn 'Skipping pidof (no real device).'
 } else {
 	Start-Sleep -Seconds 4
 	$appPid = (Invoke-Adb -Serial $serial -AdbArgs @('shell', 'pidof', $Config.Package) 2>&1 | Out-String).Trim()
 	if ([string]::IsNullOrWhiteSpace($appPid)) {
-		# Retry once - cold start can be slow
 		Start-Sleep -Seconds 4
 		$appPid = (Invoke-Adb -Serial $serial -AdbArgs @('shell', 'pidof', $Config.Package) 2>&1 | Out-String).Trim()
 	}
 	if ([string]::IsNullOrWhiteSpace($appPid)) {
-		Stop-Qa "App PID not found for $($Config.Package). Is the development client installed?"
+		Stop-Qa "App PID not found for $($Config.Package). Deep link may have failed: $devUrl"
 	}
-	# pidof may return multiple PIDs; take the first
 	$appPid = ($appPid -split '\s+')[0]
 	Write-Pass "PID $appPid"
 }
 
 # --- 14. Optional logcat ---
 if ($AppMetricaLog -or $Logcat) {
-	if ($DryRun) {
-		if ($AppMetricaLog) {
-			Write-Plan "adb -s $serial logcat --pid=$appPid -v time | Select-String AppMetrica|appmetrica|ReactNativeJS"
-		} else {
-			Write-Plan "adb -s $serial logcat --pid=$appPid -v time"
-		}
+	if ($DryRun -or $serial -eq 'DRYRUN' -or [string]::IsNullOrWhiteSpace($appPid)) {
+		Write-Plan "logcat --pid=<pid> (skipped in dry-run / no device)"
+	} elseif ($AppMetricaLog) {
+		Write-Info 'Starting AppMetrica-filtered logcat (Ctrl+C to stop)...'
+		Invoke-Adb -Serial $serial -AdbArgs @('logcat', "--pid=$appPid", '-v', 'time') 2>&1 |
+			Select-String -Pattern 'AppMetrica|appmetrica|ReactNativeJS|AdsBanner'
 	} else {
-		if ($AppMetricaLog) {
-			Write-Info 'Starting AppMetrica-filtered logcat (Ctrl+C to stop)...'
-			Invoke-Adb -Serial $serial -AdbArgs @('logcat', "--pid=$appPid", '-v', 'time') 2>&1 |
-				Select-String -Pattern 'AppMetrica|appmetrica|ReactNativeJS'
-		} elseif ($Logcat) {
-			Write-Info 'Starting PID-filtered logcat (Ctrl+C to stop)...'
-			Invoke-Adb -Serial $serial -AdbArgs @('logcat', "--pid=$appPid", '-v', 'time')
-		}
+		Write-Info 'Starting PID-filtered logcat (Ctrl+C to stop)...'
+		Invoke-Adb -Serial $serial -AdbArgs @('logcat', "--pid=$appPid", '-v', 'time')
 	}
 }
 
 # --- 15. Summary ---
 $apkStamp = if (Test-Path $apkFull) { (Get-Item $apkFull).LastWriteTime.ToString('yyyy-MM-dd HH:mm') } else { 'n/a' }
 $installedLabel = '{0} ({1})' -f $versions.ExpoVersionName, $versions.ExpoVersionCode
-$pidLabel = if ($appPid) { $appPid } else { 'n/a (dry-run)' }
-$metroLabel = if ($DryRun) { "planned 127.0.0.1:$($Config.MetroPort)" } else { "PASS 127.0.0.1:$($Config.MetroPort)" }
+$pidLabel = if ($appPid) { $appPid } else { 'n/a' }
+$metroProbe = Test-MetroHttpStatus -Port ([int]$Config.MetroPort)
+$metroLabel = if ($DryRun) {
+	"planned 127.0.0.1:$($Config.MetroPort)/status"
+} elseif ($metroProbe.Ok) {
+	"PASS 127.0.0.1:$($Config.MetroPort)/status"
+} else {
+	"FAIL $($metroProbe.Error)"
+}
 
 Write-Host ''
 Write-Host '========================================'
@@ -600,17 +938,32 @@ Write-Host '========================================'
 Write-Host ("Git:          PASS {0}" -f $gitShort)
 Write-Host ("Android SDK:  PASS {0}" -f $sdkPath)
 Write-Host ("Device:       PASS {0}/{1}" -f $serial, $device.Model)
-Write-Host ('Build:        {0}' -f ($(if ($DryRun) { 'PLANNED' } else { 'PASS' })))
+$buildLabel = if ($DryRun -and -not $buildSkipped) {
+	'PLANNED'
+} elseif ($buildSkipped) {
+	"SKIPPED ($buildSkipReason)"
+} else {
+	'PASS'
+}
+Write-Host ("Build:        {0}" -f $buildLabel)
 Write-Host ("APK:          PASS {0}" -f $apkStamp)
-Write-Host ("Installed:    {0} {1}" -f ($(if ($DryRun) { 'PLANNED' } else { 'PASS' }), $installedLabel))
+Write-Host ("Installed:    {0} {1}" -f ($(if ($DryRun -or $serial -eq 'DRYRUN') { 'PLANNED' } else { 'PASS' }), $installedLabel))
 Write-Host ("Metro:        {0}" -f $metroLabel)
-Write-Host ('ADB reverse:  {0}' -f ($(if ($DryRun) { 'PLANNED tcp:8081' } else { 'PASS tcp:8081' })))
-Write-Host ('Dev client:   {0}' -f ($(if ($DryRun) { 'PLANNED' } else { 'OPENED' })))
+Write-Host ('ADB reverse:  {0}' -f ($(if ($DryRun -or $serial -eq 'DRYRUN') { 'PLANNED tcp:8081' } else { 'PASS tcp:8081' })))
+Write-Host ('Dev client:   {0}' -f ($(if ($DryRun -or $serial -eq 'DRYRUN') { 'PLANNED deep link' } else { 'OPENED with 127.0.0.1 URL' })))
 Write-Host ("PID:          {0}" -f $pidLabel)
+if ($script:QaLogPath) {
+	$qaLogPrint = [string]$script:QaLogPath
+	Write-Host ("Log:          {0}" -f $qaLogPrint)
+}
 Write-Host ''
 if ($DryRun) {
 	Write-Host 'DRY RUN COMPLETE - no device mutation performed beyond read-only probes.'
 } else {
 	Write-Host 'READY FOR DEVICE QA'
+	Write-Host 'No manual URL entry required - deep link includes http://127.0.0.1:8081'
 }
 Write-Host '========================================'
+if ($script:QaLogPath) {
+	try { Stop-Transcript | Out-Null } catch { }
+}

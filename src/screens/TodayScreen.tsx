@@ -91,7 +91,10 @@ export function TodayScreen () {
 	}
 
 	return (
-		<Screen includeBottomSafeArea={false}>
+		<Screen
+			includeBottomSafeArea={false}
+			footer={<BannerAdSlot placement="today" />}
+		>
 			<View style={styles.switcherRow}>
 				<ProfileSwitcher />
 			</View>
@@ -210,8 +213,6 @@ export function TodayScreen () {
 					/>
 				) : null}
 			</View>
-			{/* Sticky bottom banner — above tab bar, never over primary actions. */}
-			<BannerAdSlot placement="today" />
 		</Screen>
 	)
 }

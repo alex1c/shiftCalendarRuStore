@@ -148,7 +148,10 @@ export function StatsScreen () {
 	].filter((item): item is { label: string; value: string } => item != null)
 
 	return (
-		<Screen includeBottomSafeArea={false}>
+		<Screen
+			includeBottomSafeArea={false}
+			footer={<BannerAdSlot placement="statistics" />}
+		>
 			<View style={styles.switcherRow}>
 				<ProfileSwitcher />
 			</View>
@@ -253,8 +256,6 @@ export function StatsScreen () {
 					))}
 				</SurfaceCard>
 			) : null}
-
-			<BannerAdSlot placement="statistics" />
 
 			<View style={styles.footer}>
 				<AppButton

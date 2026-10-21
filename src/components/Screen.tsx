@@ -1,5 +1,7 @@
 /**
  * Safe-area screen shell with themed background.
+ * Optional `footer` renders outside the ScrollView so sticky banners stay
+ * pinned above the tab bar instead of scrolling off-screen.
  */
 
 import type { ReactNode } from 'react'
@@ -17,6 +19,11 @@ import { spacing, useTheme } from '@/src/theme'
 
 type ScreenProps = {
 	children: ReactNode
+	/**
+	 * Pinned below scrollable content (full-bleed). Use for sticky banners
+	 * that must remain visible above the tab bar.
+	 */
+	footer?: ReactNode
 	scroll?: boolean
 	/** When false, skip extra bottom inset (tab screens already have a bar). */
 	includeBottomSafeArea?: boolean
@@ -26,6 +33,7 @@ type ScreenProps = {
 
 export function Screen ({
 	children,
+	footer,
 	scroll = true,
 	includeBottomSafeArea = true,
 	style,
@@ -46,19 +54,29 @@ export function Screen ({
 		paddingHorizontal: spacing.lg,
 	}
 
-	if (scroll) {
+	const body = scroll ? (
+		<ScrollView
+			style={styles.flex}
+			contentContainerStyle={[padding, contentStyle]}
+			keyboardShouldPersistTaps="handled"
+		>
+			{children}
+		</ScrollView>
+	) : (
+		<View style={[styles.flex, padding, contentStyle]}>{children}</View>
+	)
+
+	if (!footer) {
 		return (
-			<ScrollView
+			<View
 				style={[
 					styles.flex,
 					{ backgroundColor: colors.background },
 					style,
 				]}
-				contentContainerStyle={[padding, contentStyle]}
-				keyboardShouldPersistTaps="handled"
 			>
-				{children}
-			</ScrollView>
+				{body}
+			</View>
 		)
 	}
 
@@ -67,12 +85,12 @@ export function Screen ({
 			style={[
 				styles.flex,
 				{ backgroundColor: colors.background },
-				padding,
 				style,
-				contentStyle,
 			]}
 		>
-			{children}
+			<View style={styles.flex}>{body}</View>
+			{/* Full-bleed footer — no horizontal padding so sticky ads can span width. */}
+			<View style={styles.footer}>{footer}</View>
 		</View>
 	)
 }
@@ -80,5 +98,8 @@ export function Screen ({
 const styles = StyleSheet.create({
 	flex: {
 		flex: 1,
+	},
+	footer: {
+		width: '100%',
 	},
 })

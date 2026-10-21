@@ -17,7 +17,10 @@ export function MoreScreen ({ navigation }: Props) {
 	const { colors } = useTheme()
 
 	return (
-		<Screen includeBottomSafeArea={false}>
+		<Screen
+			includeBottomSafeArea={false}
+			footer={<BannerAdSlot placement="more" />}
+		>
 			<Text style={[styles.title, { color: colors.textPrimary }]}>
 				Ещё
 			</Text>
@@ -53,7 +56,6 @@ export function MoreScreen ({ navigation }: Props) {
 					/>
 				</View>
 			</SurfaceCard>
-			<BannerAdSlot placement="more" />
 		</Screen>
 	)
 }

@@ -128,15 +128,12 @@ describe('ads config units', () => {
 	})
 
 	it('uses production units outside test mode', () => {
-		expect(resolveBannerUnitId('calendar', false)).toBe(
-			YANDEX_PRODUCTION_UNITS.banners[0],
-		)
-		expect(resolveBannerUnitId('statistics', false)).toBe(
-			YANDEX_PRODUCTION_UNITS.banners[1],
-		)
-		expect(resolveBannerUnitId('more', false)).toBe(
-			YANDEX_PRODUCTION_UNITS.banners[2],
-		)
+		// Main sticky placements share the proven-working cabinet block (-3).
+		const workingBanner = YANDEX_PRODUCTION_UNITS.banners[2]
+		expect(resolveBannerUnitId('calendar', false)).toBe(workingBanner)
+		expect(resolveBannerUnitId('statistics', false)).toBe(workingBanner)
+		expect(resolveBannerUnitId('more', false)).toBe(workingBanner)
+		expect(resolveBannerUnitId('today', false)).toBe(workingBanner)
 		expect(resolveInterstitialUnitId(false)).toBe(
 			YANDEX_PRODUCTION_UNITS.interstitial,
 		)

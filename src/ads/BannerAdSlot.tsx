@@ -1,9 +1,9 @@
 /**
- * Sticky banner slot with safe-area padding so ads never sit under the
- * system navigation bar or bottom tabs.
+ * Sticky banner slot pinned via Screen `footer` (outside ScrollView).
+ * Safe-area padding keeps ads above the tab bar / system navigation.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
 	Dimensions,
 	StyleSheet,
@@ -11,6 +11,10 @@ import {
 	type StyleProp,
 	type ViewStyle,
 } from 'react-native'
+import {
+	useFocusEffect,
+	useIsFocused,
+} from '@react-navigation/native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 import { spacing } from '@/src/theme'
@@ -39,20 +43,39 @@ export function BannerAdSlot ({
 	aboveTabBar = true,
 }: BannerAdSlotProps) {
 	const insets = useSafeAreaInsets()
+	const isFocused = useIsFocused()
 	const { ready, sdkAvailable } = useAds()
 	const [adSize, setAdSize] = useState<unknown>(null)
 	const [failed, setFailed] = useState(false)
 	const [loaded, setLoaded] = useState(false)
+	const [requestKey, setRequestKey] = useState(0)
+	const unitId = resolveBannerUnitId(placement)
+
+	// Soft retry when returning to a tab after a prior no-fill / load error.
+	// Only one retry per focus — never loop while the screen stays focused.
+	useFocusEffect(
+		useCallback(() => {
+			if (failed) {
+				setFailed(false)
+				setLoaded(false)
+				setAdSize(null)
+				setRequestKey((value) => value + 1)
+			}
+		}, [failed]),
+	)
 
 	useEffect(() => {
 		let cancelled = false
-		if (!ready || !sdkAvailable || failed) {
+		// Skip work on blurred tabs so shared production unit IDs do not
+		// keep multiple native BannerView instances alive at once.
+		if (!isFocused || !ready || !sdkAvailable || failed) {
 			return
 		}
 		const sdk = loadYandexAds()
 		if (!sdk) {
 			return
 		}
+		// Sticky banners are full-bleed in Screen.footer (no horizontal pad).
 		const width = Math.floor(Dimensions.get('window').width)
 		void (async () => {
 			try {
@@ -60,7 +83,13 @@ export function BannerAdSlot ({
 				if (!cancelled) {
 					setAdSize(size)
 				}
-			} catch {
+			} catch (error) {
+				if (__DEV__) {
+					console.warn(
+						`[AdsBanner] stickySize failed placement=${placement} unit=${unitId}`,
+						error,
+					)
+				}
 				if (!cancelled) {
 					setFailed(true)
 				}
@@ -69,10 +98,19 @@ export function BannerAdSlot ({
 		return () => {
 			cancelled = true
 		}
-	}, [failed, ready, sdkAvailable])
+	}, [
+		failed,
+		isFocused,
+		placement,
+		ready,
+		requestKey,
+		sdkAvailable,
+		unitId,
+	])
 
-	// Ads must never block layout — render nothing until a size is ready.
-	if (!ready || !sdkAvailable || failed || !adSize) {
+	// Ads must never block layout — render nothing until focused + sized.
+	// Blurred tabs return null so one shared unit ID has one live BannerView.
+	if (!isFocused || !ready || !sdkAvailable || failed || !adSize) {
 		return null
 	}
 
@@ -102,13 +140,29 @@ export function BannerAdSlot ({
 				loaded ? 'yes' : 'no-hide-descendants'
 			}
 		>
+			{/*
+			 * key forces a fresh native request after focus retry
+			 * (requestKey bump) without leaving a dead failed instance.
+			 */}
 			<BannerView
+				key={`${placement}-${unitId}-${requestKey}`}
 				size={adSize}
-				adRequest={{ adUnitId: resolveBannerUnitId(placement) }}
+				adRequest={{ adUnitId: unitId }}
 				onAdLoaded={() => {
+					if (__DEV__) {
+						console.log(
+							`[AdsBanner] loaded placement=${placement} unit=${unitId}`,
+						)
+					}
 					setLoaded(true)
 				}}
-				onAdFailedToLoad={() => {
+				onAdFailedToLoad={(event) => {
+					if (__DEV__) {
+						console.warn(
+							`[AdsBanner] failed placement=${placement} unit=${unitId}`,
+							event,
+						)
+					}
 					setFailed(true)
 					setLoaded(false)
 				}}
@@ -123,9 +177,12 @@ const styles = StyleSheet.create({
 		width: '100%',
 		alignItems: 'center',
 		justifyContent: 'center',
-		minHeight: 0,
+		// Reserve a reasonable sticky-banner strip so layout does not collapse
+		// to zero height while the native view mounts.
+		minHeight: 50,
 	},
 	banner: {
+		width: '100%',
 		alignSelf: 'center',
 	},
 })

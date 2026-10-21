@@ -35,18 +35,21 @@ export type BannerPlacement =
 
 /**
  * Map calm / browse screens to production banner blocks.
- * Form-heavy protected flows (edit day, salary, backup) stay banner-free.
- * Reuses the fourth block for Today + reminders (no new cabinet IDs).
+ *
+ * Device QA (store build) showed only R-M-20020358-3 delivering fill on
+ * «Ещё». Calendar / Today / Stats used -1 / -2 / -4 and stayed empty.
+ * Until those blocks are confirmed to fill in the partner cabinet, all
+ * main sticky placements share the proven working unit. No new IDs.
  */
 export const BANNER_PLACEMENT_UNITS: Record<
 	BannerPlacement,
 	(typeof YANDEX_PRODUCTION_UNITS.banners)[number]
 > = {
-	calendar: YANDEX_PRODUCTION_UNITS.banners[0],
-	statistics: YANDEX_PRODUCTION_UNITS.banners[1],
+	calendar: YANDEX_PRODUCTION_UNITS.banners[2],
+	statistics: YANDEX_PRODUCTION_UNITS.banners[2],
 	more: YANDEX_PRODUCTION_UNITS.banners[2],
-	today: YANDEX_PRODUCTION_UNITS.banners[3],
-	notifications: YANDEX_PRODUCTION_UNITS.banners[3],
+	today: YANDEX_PRODUCTION_UNITS.banners[2],
+	notifications: YANDEX_PRODUCTION_UNITS.banners[2],
 }
 
 /** Whether this JS runtime should use demo units + SDK debug helpers. */

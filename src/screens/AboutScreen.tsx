@@ -20,7 +20,10 @@ export function AboutScreen () {
 	const { colors } = useTheme()
 
 	return (
-		<Screen includeBottomSafeArea={false}>
+		<Screen
+			includeBottomSafeArea={false}
+			footer={<BannerAdSlot placement="more" />}
+		>
 			<SurfaceCard>
 				<Text style={[styles.name, { color: colors.textPrimary }]}>
 					Мой график смен
@@ -86,7 +89,6 @@ export function AboutScreen () {
 					</Text>
 				</Pressable>
 			</SurfaceCard>
-			<BannerAdSlot placement="more" />
 		</Screen>
 	)
 }

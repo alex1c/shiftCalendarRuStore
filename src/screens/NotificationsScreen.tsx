@@ -235,6 +235,7 @@ export function NotificationsScreen () {
 		<Screen
 			includeBottomSafeArea={false}
 			contentStyle={styles.content}
+			footer={<BannerAdSlot placement="notifications" />}
 		>
 			<Text style={[styles.lead, { color: colors.textSecondary }]}>
 				{`Напоминания относятся к основному графику: ${primaryName}`}
@@ -459,8 +460,6 @@ export function NotificationsScreen () {
 					</Text>
 				)}
 			</SurfaceCard>
-			{/* Bottom banner below settings — above tab bar safe area. */}
-			<BannerAdSlot placement="notifications" />
 		</Screen>
 	)
 }
