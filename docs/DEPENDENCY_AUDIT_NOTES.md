@@ -16,13 +16,13 @@ From `npx expo-doctor` (SDK 57 expected vs installed):
 | expo-splash-screen | ~57.0.10 | 57.0.9 |
 | jest-expo | ~57.0.6 | 57.0.5 |
 
-**Applicability:** toolchain / SDK alignment, not a known production exploit by itself.  
+**Applicability:** toolchain / SDK alignment, not a known production exploit by itself.
 **Minimal safe fix (later release train):** `npx expo install --fix` in a dedicated dependency PR with full regression QA. Deferred here by release policy.
 
 ## B. npm audit summary
 
-Observed during remediation: **75** advisories (metadata): moderate 14, high 60, critical 1.  
-(Codex earlier cited ~52 — counts drift with lockfile; treat current `npm audit` as source of truth.)
+Observed during remediation: **75** advisories (metadata): moderate 14, high 60, critical 1.
+(Codex earlier cited ~52 вЂ” counts drift with lockfile; treat current `npm audit` as source of truth.)
 
 Most highs are transitive through **Jest**, **Metro/Expo CLI**, and **react-native** tooling graphs. Fixes often propose major Expo/Jest downgrades/upgrades that are unsafe as a blanket action.
 
@@ -31,17 +31,17 @@ Most highs are transitive through **Jest**, **Metro/Expo CLI**, and **react-nati
 | Field | Value |
 |-------|-------|
 | Package | `shell-quote@1.10.0` |
-| Advisory | GHSA-pqg4-j6r4-53mv — `quote()` command injection |
+| Advisory | GHSA-pqg4-j6r4-53mv вЂ” `quote()` command injection |
 | Severity | critical |
 | Range | `>=1.8.4 <1.11.0` |
-| Dependency path | `react-native` → `react-devtools-core` → `shell-quote` and `@react-native-community/cli` → `cli-tools` → `launch-editor` → `shell-quote` |
-| Production Android AAB | **Not applicable** — DevTools / CLI editor helpers are not packaged into the RuStore release AAB runtime |
+| Dependency path | `react-native` в†’ `react-devtools-core` в†’ `shell-quote` and `@react-native-community/cli` в†’ `cli-tools` в†’ `launch-editor` в†’ `shell-quote` |
+| Production Android AAB | **Not applicable** вЂ” DevTools / CLI editor helpers are not packaged into the RuStore release AAB runtime |
 | Exploitable in store build? | **No evidence** of inclusion in production app binary path |
 | Minimal safe fix | Prefer RN/Expo-aligned bump that pulls `shell-quote@>=1.11.0`, or a narrowly scoped `overrides` entry **after** CI proof; do not mass-audit-fix |
 
 **Status impact:** does **not** keep release BLOCKED for production exploitability. Remains tracked as tooling debt.
 
-## D. High — direct / notable production-adjacent
+## D. High вЂ” direct / notable production-adjacent
 
 | Package | Path / note | Prod Android? | Minimal fix |
 |---------|-------------|---------------|-------------|
