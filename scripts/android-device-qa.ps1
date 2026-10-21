@@ -138,68 +138,168 @@ function Get-QaLogPath {
 	return (Join-Path $logDir "android-device-qa-$stamp.log")
 }
 
-# True when debug APK exists and is at least as new as watched native inputs.
-function Test-DebugApkMatchesNative {
+# Timestamps alone are NOT proof of APK freshness. Policy: always run
+# incremental assembleDebug unless the caller passes -SkipBuild explicitly.
+function Test-ShouldRunAssembleDebug {
+	param([bool]$SkipBuild)
+	return -not $SkipBuild
+}
+
+function Get-ProcessCommandLineInfo {
+	param([Parameter(Mandatory)][int]$ProcessId)
+	try {
+		$proc = Get-CimInstance -ClassName Win32_Process -Filter "ProcessId=$ProcessId" -ErrorAction Stop
+		return [pscustomobject]@{
+			ProcessId = [int]$proc.ProcessId
+			ParentProcessId = [int]$proc.ParentProcessId
+			Name = [string]$proc.Name
+			CommandLine = [string]$proc.CommandLine
+		}
+	} catch {
+		return $null
+	}
+}
+
+function Test-CommandLineMatchesProject {
+	param(
+		[string]$CommandLine,
+		[Parameter(Mandatory)][string]$Root
+	)
+	if ([string]::IsNullOrWhiteSpace($CommandLine)) {
+		return $false
+	}
+	$norm = ([System.IO.Path]::GetFullPath($Root)).TrimEnd('\', '/')
+	$candidates = @(
+		$norm,
+		($norm -replace '\\', '/'),
+		($norm -replace '\\', '\\\\')
+	)
+	foreach ($c in $candidates) {
+		if ($CommandLine.IndexOf($c, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+			return $true
+		}
+	}
+	return $false
+}
+
+# Walk listener PID + parents (npm/npx/node) and require project-root evidence.
+# Returns Ok=false when identity cannot be proven - caller must BLOCK, not kill.
+function Test-MetroBelongsToProject {
 	param(
 		[Parameter(Mandatory)][string]$Root,
-		[Parameter(Mandatory)][string]$ApkFullPath
+		[Parameter(Mandatory)][int]$Port
 	)
-	if (-not (Test-Path $ApkFullPath)) {
+	$listeners = @(Get-ListenersOnPort -Port $Port)
+	if ($listeners.Count -eq 0) {
 		return [pscustomobject]@{
 			Ok = $false
-			Reason = 'APK missing'
-			ApkTime = $null
-			NewestSource = $null
+			Reason = "No listener on port $Port"
+			Details = ''
+			ProcessId = 0
 		}
 	}
-	$apkTime = (Get-Item -LiteralPath $ApkFullPath).LastWriteTimeUtc
-	$watch = @(
-		(Join-Path $Root 'android\app\src'),
-		(Join-Path $Root 'android\app\build.gradle'),
-		(Join-Path $Root 'android\build.gradle'),
-		(Join-Path $Root 'android\settings.gradle'),
-		(Join-Path $Root 'android\gradle.properties'),
-		(Join-Path $Root 'app.json'),
-		(Join-Path $Root 'package.json')
-	)
-	$newest = [datetime]::MinValue
-	$newestPath = ''
-	foreach ($path in $watch) {
-		if (Test-Path -LiteralPath $path -PathType Container) {
-			$files = @(Get-ChildItem -LiteralPath $path -Recurse -File -ErrorAction SilentlyContinue |
-				Where-Object { $_.FullName -notmatch '[\\/]build[\\/]' })
-			foreach ($f in $files) {
-				if ($f.LastWriteTimeUtc -gt $newest) {
-					$newest = $f.LastWriteTimeUtc
-					$newestPath = $f.FullName
+
+	$rootFull = ([System.IO.Path]::GetFullPath($Root)).TrimEnd('\', '/')
+	$detailParts = @()
+	foreach ($listener in $listeners) {
+		$currentId = [int]$listener.OwningProcess
+		$visited = @{}
+		$chainNotes = @()
+		while ($currentId -gt 0 -and -not $visited.ContainsKey($currentId)) {
+			$visited[$currentId] = $true
+			$info = Get-ProcessCommandLineInfo -ProcessId $currentId
+			if ($null -eq $info) {
+				$chainNotes += "PID $currentId (command line unavailable)"
+				break
+			}
+			$clip = if ($info.CommandLine.Length -gt 120) {
+				$info.CommandLine.Substring(0, 120) + '...'
+			} else {
+				$info.CommandLine
+			}
+			$chainNotes += "PID $($info.ProcessId) $($info.Name): $clip"
+			if (Test-CommandLineMatchesProject -CommandLine $info.CommandLine -Root $rootFull) {
+				return [pscustomobject]@{
+					Ok = $true
+					Reason = "Metro PID $($listener.OwningProcess) belongs to project (matched via PID $($info.ProcessId))"
+					Details = ($chainNotes -join ' | ')
+					ProcessId = [int]$listener.OwningProcess
 				}
 			}
-		} elseif (Test-Path -LiteralPath $path) {
-			$item = Get-Item -LiteralPath $path
-			if ($item.LastWriteTimeUtc -gt $newest) {
-				$newest = $item.LastWriteTimeUtc
-				$newestPath = $item.FullName
-			}
+			$currentId = [int]$info.ParentProcessId
 		}
+		$detailParts += ($chainNotes -join ' <- ')
 	}
-	if ($newest -eq [datetime]::MinValue) {
-		return [pscustomobject]@{
-			Ok = $true
-			Reason = 'No watched native sources found; treating APK as reusable'
-			ApkTime = $apkTime
-			NewestSource = $null
-		}
-	}
-	$ok = $apkTime -ge $newest
+
 	return [pscustomobject]@{
-		Ok = $ok
-		Reason = if ($ok) {
-			"APK >= newest native input ($newestPath)"
-		} else {
-			"Native newer than APK: $newestPath"
+		Ok = $false
+		Reason = "BLOCKED: port $Port has a healthy/listening process that does not reference this project root ($rootFull). Will not attach Dev Client to a foreign Metro. Stop it manually if it is yours, then re-run."
+		Details = ($detailParts -join ' ;; ')
+		ProcessId = [int]$listeners[0].OwningProcess
+	}
+}
+
+function Test-AmStartOutput {
+	param(
+		[Parameter(Mandatory)][string]$Output,
+		[Parameter(Mandatory)][string]$Package
+	)
+	# Existing app PID must never be treated as proof — only am start / intent text.
+	if ($Output -match '(?i)Error:|Exception|Activity not started|Unable to resolve Intent|SecurityException|does not exist|Permission Denial') {
+		return [pscustomobject]@{
+			Ok = $false
+			Error = "Activity Manager rejected start: $($Matches[0])"
 		}
-		ApkTime = $apkTime
-		NewestSource = $newestPath
+	}
+	if ($Output -match '(?i)Starting:\s*Intent') {
+		if ($Output -match [regex]::Escape($Package) -or $Output -match 'expo-development-client') {
+			return [pscustomobject]@{ Ok = $true; Error = '' }
+		}
+		# Some AM builds omit package in the one-liner but still start VIEW intents.
+		return [pscustomobject]@{ Ok = $true; Error = '' }
+	}
+	return [pscustomobject]@{
+		Ok = $false
+		Error = "Unrecognized am start output (treating as FAIL): $Output"
+	}
+}
+
+function Test-NodeEnginesPreflight {
+	param([Parameter(Mandatory)][string]$Root)
+	$pkgPath = Join-Path $Root 'package.json'
+	if (-not (Test-Path $pkgPath)) {
+		return [pscustomobject]@{ Ok = $false; Message = 'package.json missing' }
+	}
+	$pkg = Get-Content -Raw -Path $pkgPath | ConvertFrom-Json
+	$engine = [string]$pkg.engines.node
+	if ([string]::IsNullOrWhiteSpace($engine)) {
+		return [pscustomobject]@{ Ok = $false; Message = 'package.json engines.node missing' }
+	}
+	$raw = (& node -v 2>$null)
+	if (-not $raw) {
+		return [pscustomobject]@{ Ok = $false; Message = 'node not found on PATH' }
+	}
+	$version = ($raw -replace '^v', '').Trim()
+	# Align with react-native@0.86 engines: ^20.19.4 || ^22.13.0 || ^24.3.0 || >=25
+	$ok = $false
+	if ($version -match '^(\d+)\.(\d+)\.(\d+)') {
+		$major = [int]$Matches[1]
+		$minor = [int]$Matches[2]
+		$patch = [int]$Matches[3]
+		if ($major -eq 20 -and ($minor -gt 19 -or ($minor -eq 19 -and $patch -ge 4))) { $ok = $true }
+		elseif ($major -eq 22 -and ($minor -gt 13 -or ($minor -eq 13 -and $patch -ge 0))) { $ok = $true }
+		elseif ($major -eq 24 -and ($minor -gt 3 -or ($minor -eq 3 -and $patch -ge 0))) { $ok = $true }
+		elseif ($major -ge 25) { $ok = $true }
+	}
+	if (-not $ok) {
+		return [pscustomobject]@{
+			Ok = $false
+			Message = "Node $version does not satisfy engines.node='$engine' (Expo 57 / RN 0.86)."
+		}
+	}
+	return [pscustomobject]@{
+		Ok = $true
+		Message = "Node $version OK for engines.node='$engine'"
 	}
 }
 
@@ -483,10 +583,17 @@ function Ensure-MetroIpv4Ready {
 	Write-Info 'Policy: ONE PROJECT = ONE METRO = 8081 (never auto-switch to 8082/8083).'
 	Write-Info 'Readiness gate: HTTP http://127.0.0.1:<port>/status (QR is ignored).'
 
-	# Case A: healthy IPv4 Metro already running - reuse, do not start a second one.
+	# Case A: healthy IPv4 Metro already running - reuse ONLY if it belongs to this project.
 	$existing = Test-MetroHttpStatus -Port $Port
 	if ($existing.Ok) {
+		$identity = Test-MetroBelongsToProject -Root $Root -Port $Port
+		if (-not $identity.Ok) {
+			Write-Fail $identity.Reason
+			Write-Host $identity.Details
+			Stop-Qa "Foreign or unidentifiable Metro on port $Port. Refusing to attach Dev Client."
+		}
 		Write-Pass "Existing Metro healthy on 127.0.0.1:$Port ($($existing.Body))"
+		Write-Pass $identity.Reason
 		return
 	}
 
@@ -569,23 +676,58 @@ function Open-DevClientDeepLink {
 	param(
 		[Parameter(Mandatory)][string]$Serial,
 		[Parameter(Mandatory)][string]$Scheme,
-		[Parameter(Mandatory)][int]$Port
+		[Parameter(Mandatory)][int]$Port,
+		[Parameter(Mandatory)][string]$Package
 	)
 	# Must include explicit project URL so launcher is NOT left on blank Development Build home.
 	$devUrl = "exp+${Scheme}://expo-development-client/?url=http%3A%2F%2F127.0.0.1%3A${Port}"
 	if ($DryRun) {
 		Write-Plan "adb -s $Serial shell am start -a android.intent.action.VIEW -d `"$devUrl`""
+		Write-Plan 'Validate am start output + resumed activity intent (PID alone is NOT enough)'
 		return $devUrl
 	}
 	if ($Serial -eq 'DRYRUN') {
 		Write-Warn 'Skipping Dev Client deep link (no real device).'
 		return $devUrl
 	}
-	Invoke-Adb -Serial $Serial -AdbArgs @(
+
+	$startOut = Invoke-Adb -Serial $Serial -AdbArgs @(
 		'shell', 'am', 'start',
 		'-a', 'android.intent.action.VIEW',
 		'-d', $devUrl
-	) | Out-Null
+	) 2>&1 | Out-String
+	Write-Host $startOut
+	if ($LASTEXITCODE -ne 0) {
+		Stop-Qa "am start exited with code $LASTEXITCODE. Output: $startOut"
+	}
+	$amCheck = Test-AmStartOutput -Output $startOut -Package $Package
+	if (-not $amCheck.Ok) {
+		Stop-Qa "Dev Client deep link FAIL: $($amCheck.Error)"
+	}
+
+	# Prove the VIEW intent landed — never treat a pre-existing app PID as success.
+	Start-Sleep -Seconds 2
+	$activityDump = Invoke-Adb -Serial $Serial -AdbArgs @(
+		'shell', 'dumpsys', 'activity', 'activities'
+	) 2>&1 | Out-String
+	$intentOk = (
+		$activityDump -match [regex]::Escape($devUrl) -or
+		$activityDump -match 'exp\+shift-calendar://expo-development-client' -or
+		(
+			$activityDump -match [regex]::Escape($Package) -and
+			$activityDump -match '127\.0\.0\.1' -and
+			$activityDump -match '8081'
+		)
+	)
+	if (-not $intentOk) {
+		Stop-Qa @"
+Dev Client deep link FAIL: am start reported OK but resumed activity dump does not show the project URL intent.
+Existing app PID alone is not accepted as proof.
+am start output:
+$startOut
+"@
+	}
+
 	Write-Pass "Dev Client deep link opened -> 127.0.0.1:$Port"
 	Write-Info "URL: $devUrl"
 	return $devUrl
@@ -645,13 +787,13 @@ function Invoke-SelfTests {
 		Write-Pass 'Scenario covered: missing-device placeholder under -SelfTest/-DryRun'
 	}
 
-	# 5) APK freshness helper shape
-	$apkProbe = Test-DebugApkMatchesNative -Root (Get-ProjectRoot) -ApkFullPath (Join-Path (Get-ProjectRoot) $Config.ApkPath)
-	if ($null -eq $apkProbe.Ok) {
-		Write-Fail 'Test-DebugApkMatchesNative returned no Ok flag'; $failures++
-	} else {
-		Write-Pass "APK freshness helper OK (Ok=$($apkProbe.Ok); $($apkProbe.Reason))"
-	}
+	# 5) APK policy: timestamps are insufficient - assembleDebug unless -SkipBuild
+	if ((Test-ShouldRunAssembleDebug -SkipBuild:$false) -ne $true) {
+		Write-Fail 'AssembleDebug should run when -SkipBuild is absent'; $failures++
+	} else { Write-Pass 'Policy: incremental assembleDebug runs unless -SkipBuild' }
+	if ((Test-ShouldRunAssembleDebug -SkipBuild:$true) -ne $false) {
+		Write-Fail '-SkipBuild should suppress assembleDebug'; $failures++
+	} else { Write-Pass 'Policy: -SkipBuild suppresses assembleDebug' }
 
 	# 6) Simulated classification: IPv6-only vs IPv4 healthy
 	$fakeIpv6Only = [pscustomobject]@{ HasIpv4 = $false; HasIpv6 = $true; Count = 1 }
@@ -662,6 +804,35 @@ function Invoke-SelfTests {
 	if (-not $fakeHealthy.HasIpv4) {
 		Write-Fail 'IPv4 healthy scenario fixture broken'; $failures++
 	} else { Write-Pass 'Scenario fixture: IPv4 healthy reuses one Metro (no second process)' }
+
+	# 7) Metro project identity — command-line matcher
+	$projRoot = Get-ProjectRoot
+	if (-not (Test-CommandLineMatchesProject -CommandLine "node $projRoot\node_modules\expo start" -Root $projRoot)) {
+		Write-Fail 'Project command-line matcher failed for own root'; $failures++
+	} else { Write-Pass 'Metro identity matcher accepts this project path' }
+	if (Test-CommandLineMatchesProject -CommandLine 'node D:\otherApp\node_modules\expo start --port 8081' -Root $projRoot) {
+		Write-Fail 'Project command-line matcher falsely accepted foreign root'; $failures++
+	} else { Write-Pass 'Metro identity matcher rejects foreign project path' }
+
+	# 8) am start unresolved intent while app may already be running
+	$badAm = @"
+Error: Activity not started, unable to resolve Intent { act=android.intent.action.VIEW dat=exp+shift-calendar://... }
+"@
+	$amFail = Test-AmStartOutput -Output $badAm -Package $Config.Package
+	if ($amFail.Ok) {
+		Write-Fail 'Unresolved intent must FAIL even if package was already running'; $failures++
+	} else { Write-Pass 'Unresolved Intent output is treated as Dev Client FAIL' }
+	$goodAm = "Starting: Intent { act=android.intent.action.VIEW dat=exp+shift-calendar://expo-development-client/... cmp=$($Config.Package)/.MainActivity }"
+	$amOk = Test-AmStartOutput -Output $goodAm -Package $Config.Package
+	if (-not $amOk.Ok) {
+		Write-Fail "Valid am start incorrectly rejected: $($amOk.Error)"; $failures++
+	} else { Write-Pass 'Valid am start output accepted' }
+
+	# 9) Node engines preflight
+	$nodeCheck = Test-NodeEnginesPreflight -Root $projRoot
+	if (-not $nodeCheck.Ok) {
+		Write-Fail $nodeCheck.Message; $failures++
+	} else { Write-Pass $nodeCheck.Message }
 
 	Write-Host '========================================'
 	if ($failures -gt 0) {
@@ -745,6 +916,13 @@ if ($trackedDirty.Count -gt 0) {
 }
 Write-Pass "Git $gitShort"
 
+# --- 1b. Node engines (Expo 57 / RN 0.86) ---
+$nodeEngines = Test-NodeEnginesPreflight -Root $ProjectRoot
+if (-not $nodeEngines.Ok) {
+	Stop-Qa $nodeEngines.Message
+}
+Write-Pass $nodeEngines.Message
+
 # --- 2. Android SDK ---
 $sdkPath = Join-Path $env:LOCALAPPDATA 'Android\Sdk'
 if (-not (Test-Path $sdkPath)) {
@@ -793,26 +971,16 @@ $apkFull = Join-Path $ProjectRoot $Config.ApkPath
 $buildSkipped = $false
 $buildSkipReason = ''
 
-$apkFresh = Test-DebugApkMatchesNative -Root $ProjectRoot -ApkFullPath $apkFull
-if ($SkipBuild) {
+# Codex P2: never trust timestamps / prior APK as freshness proof.
+# Always run incremental Gradle assembleDebug unless -SkipBuild is explicit.
+if (-not (Test-ShouldRunAssembleDebug -SkipBuild:([bool]$SkipBuild))) {
 	$buildSkipped = $true
 	$buildSkipReason = 'explicit -SkipBuild'
-	Write-Warn "SkipBuild: using existing debug APK ($($apkFresh.Reason))"
-} elseif ($apkFresh.Ok -and -not $DryRun) {
-	$buildSkipped = $true
-	$buildSkipReason = "auto: $($apkFresh.Reason)"
-	Write-Pass 'Skipping Gradle assembleDebug - debug APK matches current native inputs'
-	Write-Info $apkFresh.Reason
+	Write-Warn 'SkipBuild: using existing debug APK (caller accepted possible staleness)'
 } elseif ($DryRun) {
-	if ($apkFresh.Ok) {
-		Write-Plan "Would skip assembleDebug (APK matches native): $($apkFresh.Reason)"
-		$buildSkipped = $true
-		$buildSkipReason = "dry-run auto-skip: $($apkFresh.Reason)"
-	} else {
-		Write-Plan "cd android; .\gradlew.bat assembleDebug --console=plain ($($apkFresh.Reason))"
-	}
+	Write-Plan 'cd android; .\gradlew.bat assembleDebug --console=plain (incremental; required for native freshness)'
 } else {
-	Write-Info "Building debug APK (assembleDebug)... ($($apkFresh.Reason))"
+	Write-Info 'Building debug APK (incremental assembleDebug; required native freshness gate)...'
 	Push-Location $androidDir
 	try {
 		& .\gradlew.bat assembleDebug --console=plain
@@ -882,7 +1050,7 @@ if ($DryRun) {
 Ensure-AdbReverse -Serial $serial -Port ([int]$Config.MetroPort)
 
 # --- 12. Open Dev Client with explicit 127.0.0.1 URL (never blank launcher) ---
-$devUrl = Open-DevClientDeepLink -Serial $serial -Scheme $Config.Scheme -Port ([int]$Config.MetroPort)
+$devUrl = Open-DevClientDeepLink -Serial $serial -Scheme $Config.Scheme -Port ([int]$Config.MetroPort) -Package $Config.Package
 
 # --- 13. Wait for PID ---
 $appPid = ''
@@ -898,7 +1066,7 @@ if ($DryRun) {
 		$appPid = (Invoke-Adb -Serial $serial -AdbArgs @('shell', 'pidof', $Config.Package) 2>&1 | Out-String).Trim()
 	}
 	if ([string]::IsNullOrWhiteSpace($appPid)) {
-		Stop-Qa "App PID not found for $($Config.Package). Deep link may have failed: $devUrl"
+		Stop-Qa "App PID not found for $($Config.Package) after intent-verified deep link: $devUrl"
 	}
 	$appPid = ($appPid -split '\s+')[0]
 	Write-Pass "PID $appPid"

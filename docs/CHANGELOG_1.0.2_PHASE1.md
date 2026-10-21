@@ -1,12 +1,12 @@
 # Changelog draft — Phase 1 (pre-bump)
 
-Target next store version: **1.0.2** (versionCode TBD at release build).  
+Target next store version: **1.0.2** (versionCode TBD at release build).
 This Phase 1 commit does **not** bump `app.json` / `android/app/build.gradle`.
 
 ## RuStore «Что нового» (черновик)
 
 - Исправлено отображение рекламных баннеров на экранах Календарь, Сегодня и Статистика: баннер закреплён внизу экрана и больше не уезжает за пределы видимой области при прокрутке.
-- Улучшена повторная загрузка баннера после временной ошибки сети / no-fill при возврате на экран.
+- Улучшена повторная загрузка баннера после временной ошибки сети / no-fill при возврате на экран (только после реального ухода со вкладки, без бесконечных запросов).
 - Стабилизирован USB-запуск отладочной сборки на Windows (Metro по IPv4 + автоматический deep link).
 
 ## Internal notes

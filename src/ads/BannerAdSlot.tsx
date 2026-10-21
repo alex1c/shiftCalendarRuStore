@@ -1,9 +1,12 @@
 /**
  * Sticky banner slot pinned via Screen `footer` (outside ScrollView).
  * Safe-area padding keeps ads above the tab bar / system navigation.
+ *
+ * Load policy lives in `bannerFocusSession` so a no-fill while focused
+ * never auto-retries until a real blur → focus cycle.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
 	Dimensions,
 	StyleSheet,
@@ -23,6 +26,7 @@ import {
 	resolveBannerUnitId,
 	type BannerPlacement,
 } from './adsConfig'
+import { createBannerFocusSession } from './bannerFocusSession'
 import { useAds } from './AdsProvider'
 import { loadYandexAds } from './yandexAdsNative'
 
@@ -45,44 +49,75 @@ export function BannerAdSlot ({
 	const insets = useSafeAreaInsets()
 	const isFocused = useIsFocused()
 	const { ready, sdkAvailable } = useAds()
+	const sessionRef = useRef(createBannerFocusSession())
 	const [adSize, setAdSize] = useState<unknown>(null)
 	const [failed, setFailed] = useState(false)
 	const [loaded, setLoaded] = useState(false)
 	const [requestKey, setRequestKey] = useState(0)
+	// Bumped only on real focus entries that may start a load (not on failed).
+	const [focusEpoch, setFocusEpoch] = useState(0)
 	const unitId = resolveBannerUnitId(placement)
 
-	// Soft retry when returning to a tab after a prior no-fill / load error.
-	// Only one retry per focus — never loop while the screen stays focused.
+	// Empty deps: only real navigation focus / blur may drive retry.
+	// Do NOT depend on `failed` — that re-created the infinite retry loop.
 	useFocusEffect(
 		useCallback(() => {
-			if (failed) {
+			const plan = sessionRef.current.onFocus()
+			if (plan.retriedAfterBlur) {
 				setFailed(false)
 				setLoaded(false)
 				setAdSize(null)
-				setRequestKey((value) => value + 1)
+				setRequestKey(plan.requestKey)
 			}
-		}, [failed]),
+			if (plan.shouldStartLoad) {
+				// Synchronize with session.onFocus before the load effect runs.
+				setFocusEpoch((value) => value + 1)
+			}
+			return () => {
+				sessionRef.current.onBlur()
+			}
+		}, []),
 	)
+
+	// Dispose the session on unmount so late async callbacks are ignored.
+	useEffect(() => {
+		const session = sessionRef.current
+		return () => {
+			session.dispose()
+		}
+	}, [])
 
 	useEffect(() => {
 		let cancelled = false
-		// Skip work on blurred tabs so shared production unit IDs do not
-		// keep multiple native BannerView instances alive at once.
-		if (!isFocused || !ready || !sdkAvailable || failed) {
+		if (!ready || !sdkAvailable || focusEpoch === 0) {
+			return
+		}
+		const session = sessionRef.current
+		if (!session.canStartLoad()) {
 			return
 		}
 		const sdk = loadYandexAds()
 		if (!sdk) {
 			return
 		}
+		if (!session.markLoadStarted()) {
+			return
+		}
+
 		// Sticky banners are full-bleed in Screen.footer (no horizontal pad).
 		const width = Math.floor(Dimensions.get('window').width)
+		const activeRequestKey = session.getRequestKey()
 		void (async () => {
 			try {
 				const size = await sdk.BannerAdSize.stickySize(width)
-				if (!cancelled) {
-					setAdSize(size)
+				if (
+					cancelled ||
+					session.isDisposed() ||
+					session.getRequestKey() !== activeRequestKey
+				) {
+					return
 				}
+				setAdSize(size)
 			} catch (error) {
 				if (__DEV__) {
 					console.warn(
@@ -90,17 +125,22 @@ export function BannerAdSlot ({
 						error,
 					)
 				}
-				if (!cancelled) {
-					setFailed(true)
+				if (
+					cancelled ||
+					session.isDisposed() ||
+					session.getRequestKey() !== activeRequestKey
+				) {
+					return
 				}
+				session.markLoadFailed()
+				setFailed(true)
 			}
 		})()
 		return () => {
 			cancelled = true
 		}
 	}, [
-		failed,
-		isFocused,
+		focusEpoch,
 		placement,
 		ready,
 		requestKey,
@@ -123,6 +163,7 @@ export function BannerAdSlot ({
 	const bottomPad = aboveTabBar
 		? spacing.sm
 		: Math.max(insets.bottom, spacing.md) + spacing.sm
+	const activeRequestKey = requestKey
 
 	return (
 		<View
@@ -141,28 +182,44 @@ export function BannerAdSlot ({
 			}
 		>
 			{/*
-			 * key forces a fresh native request after focus retry
-			 * (requestKey bump) without leaving a dead failed instance.
+			 * key forces a fresh native request after blur→focus retry
+			 * without leaving a dead failed instance.
 			 */}
 			<BannerView
 				key={`${placement}-${unitId}-${requestKey}`}
 				size={adSize}
 				adRequest={{ adUnitId: unitId }}
 				onAdLoaded={() => {
+					const session = sessionRef.current
+					if (
+						session.isDisposed() ||
+						session.getRequestKey() !== activeRequestKey
+					) {
+						return
+					}
 					if (__DEV__) {
 						console.log(
 							`[AdsBanner] loaded placement=${placement} unit=${unitId}`,
 						)
 					}
+					session.markLoadSucceeded()
 					setLoaded(true)
 				}}
 				onAdFailedToLoad={(event) => {
+					const session = sessionRef.current
+					if (
+						session.isDisposed() ||
+						session.getRequestKey() !== activeRequestKey
+					) {
+						return
+					}
 					if (__DEV__) {
 						console.warn(
 							`[AdsBanner] failed placement=${placement} unit=${unitId}`,
 							event,
 						)
 					}
+					session.markLoadFailed()
 					setFailed(true)
 					setLoaded(false)
 				}}
