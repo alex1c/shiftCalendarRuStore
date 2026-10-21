@@ -79,30 +79,35 @@ describe('bannerFocusSession', () => {
 	it('rapid tab switches keep a correct lifecycle', () => {
 		const session = createBannerFocusSession()
 
-		// Tab A focus + success
+		// First focus + success
 		session.onFocus()
 		expect(session.markLoadStarted()).toBe(true)
 		session.markLoadSucceeded()
 		session.onBlur()
 
-		// Tab B focus (simulated as same session returning)
-		session.onFocus()
-		// Success path: no failure, loadStartedThisFocus reset on blur,
-		// so a new focus may start a fresh load for remount safety.
-		expect(session.canStartLoad()).toBe(true)
-		expect(session.markLoadStarted()).toBe(true)
-		session.markLoadFailed()
+		// Return after success: remount BannerView from React state, no new load.
+		const backAfterSuccess = session.onFocus()
+		expect(backAfterSuccess.shouldStartLoad).toBe(false)
+		expect(session.canStartLoad()).toBe(false)
+		expect(session.markLoadStarted()).toBe(false)
+		expect(session.getLoadStartCount()).toBe(1)
 		session.onBlur()
 
-		// Back to tab quickly after failure → one retry only
-		const retry = session.onFocus()
+		// Failure path then blur → focus → exactly one retry
+		// (simulate a later failure by forcing a retry cycle via dispose-less fail)
+		const session2 = createBannerFocusSession()
+		session2.onFocus()
+		expect(session2.markLoadStarted()).toBe(true)
+		session2.markLoadFailed()
+		session2.onBlur()
+		const retry = session2.onFocus()
 		expect(retry.retriedAfterBlur).toBe(true)
-		expect(session.markLoadStarted()).toBe(true)
-		expect(session.getLoadStartCount()).toBe(3)
+		expect(session2.markLoadStarted()).toBe(true)
+		expect(session2.getLoadStartCount()).toBe(2)
 
 		// Instant spurious focus while focused (deps churn)
-		expect(session.onFocus().shouldStartLoad).toBe(false)
-		expect(session.markLoadStarted()).toBe(false)
-		expect(session.getLoadStartCount()).toBe(3)
+		expect(session2.onFocus().shouldStartLoad).toBe(false)
+		expect(session2.markLoadStarted()).toBe(false)
+		expect(session2.getLoadStartCount()).toBe(2)
 	})
 })

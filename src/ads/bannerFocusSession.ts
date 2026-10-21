@@ -41,6 +41,12 @@ export function createBannerFocusSession (): BannerFocusSession {
 	let loadStartCount = 0
 	/** Tracks whether the current focus entry already opened a load attempt. */
 	let loadStartedThisFocus = false
+	/**
+	 * True until the first successful size/ad path completes, or after a
+	 * blur→focus retry clears a failure. Returning to a tab after success
+	 * reuses React state / remounts BannerView without a new stickySize call.
+	 */
+	let needsLoad = true
 
 	return {
 		onFocus (): BannerFocusPlan {
@@ -69,10 +75,12 @@ export function createBannerFocusSession (): BannerFocusSession {
 				failed = false
 				requestKey += 1
 				loadStartedThisFocus = false
+				needsLoad = true
 				retriedAfterBlur = true
 			}
 
-			const shouldStartLoad = !failed && !loadStartedThisFocus
+			const shouldStartLoad =
+				needsLoad && !failed && !loadStartedThisFocus
 			return { shouldStartLoad, requestKey, retriedAfterBlur }
 		},
 
@@ -81,12 +89,18 @@ export function createBannerFocusSession (): BannerFocusSession {
 				return
 			}
 			focused = false
-			// Keep `failed` so the next real focus can decide to retry.
+			// Keep `failed` / `needsLoad` so the next real focus can decide.
 			loadStartedThisFocus = false
 		},
 
 		markLoadStarted (): boolean {
-			if (disposed || !focused || failed || loadStartedThisFocus) {
+			if (
+				disposed ||
+				!focused ||
+				failed ||
+				loadStartedThisFocus ||
+				!needsLoad
+			) {
 				return false
 			}
 			loadStartedThisFocus = true
@@ -99,6 +113,7 @@ export function createBannerFocusSession (): BannerFocusSession {
 				return
 			}
 			failed = false
+			needsLoad = false
 		},
 
 		markLoadFailed (): void {
@@ -106,6 +121,7 @@ export function createBannerFocusSession (): BannerFocusSession {
 				return
 			}
 			failed = true
+			needsLoad = false
 		},
 
 		dispose (): void {
@@ -118,7 +134,8 @@ export function createBannerFocusSession (): BannerFocusSession {
 				!disposed &&
 				focused &&
 				!failed &&
-				!loadStartedThisFocus
+				!loadStartedThisFocus &&
+				needsLoad
 			)
 		},
 
