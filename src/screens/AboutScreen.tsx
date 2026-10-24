@@ -32,7 +32,7 @@ export function AboutScreen () {
 					ForestMusic
 				</Text>
 				<Text style={[styles.meta, { color: colors.textSecondary }]}>
-					Версия 1.0.1
+					Версия 1.0.2
 				</Text>
 				<Text style={[styles.body, { color: colors.textSecondary }]}>
 					Календарь рабочих графиков для сменной работы. Основные

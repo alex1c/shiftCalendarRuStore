@@ -46,8 +46,8 @@ describe('release metadata', () => {
 		expect(expo.android.package).toBe(
 			'com.calculatorplatform.shiftcalendar',
 		)
-		expect(expo.version).toBe('1.0.1')
-		expect(expo.android.versionCode).toBe(2)
+		expect(expo.version).toBe('1.0.2')
+		expect(expo.android.versionCode).toBe(3)
 	})
 
 	it('keeps Expo app.json and native Android versions in sync', () => {

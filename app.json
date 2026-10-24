@@ -2,7 +2,7 @@
   "expo": {
     "name": "Мой график смен",
     "slug": "shift-calendar",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon_gpt.png",
     "scheme": "shiftcalendar",
@@ -13,7 +13,7 @@
     },
     "android": {
       "package": "com.calculatorplatform.shiftcalendar",
-      "versionCode": 2,
+      "versionCode": 3,
       "icon": "./assets/icon_gpt.png",
       "adaptiveIcon": {
         "backgroundColor": "#1D98FE",
